@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as AuthenticatedVisaoGeralRouteImport } from './routes/_authenticated/visao-geral'
 import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
+import { Route as AuthenticatedProjetosSlugRouteImport } from './routes/_authenticated/projetos.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,6 +31,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedVisaoGeralRoute = AuthenticatedVisaoGeralRouteImport.update({
   id: '/visao-geral',
   path: '/visao-geral',
@@ -40,17 +47,27 @@ const AuthenticatedProjetosIndexRoute =
     path: '/projetos/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedProjetosSlugRoute =
+  AuthenticatedProjetosSlugRouteImport.update({
+    id: '/projetos/$slug',
+    path: '/projetos/$slug',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
   '/projetos/': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
   '/projetos': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRoutesById {
@@ -58,20 +75,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/_authenticated/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/_authenticated/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
   '/_authenticated/projetos/': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/visao-geral' | '/projetos/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/usuarios'
+    | '/visao-geral'
+    | '/projetos/$slug'
+    | '/projetos/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/visao-geral' | '/projetos'
+  to:
+    | '/'
+    | '/auth'
+    | '/usuarios'
+    | '/visao-geral'
+    | '/projetos/$slug'
+    | '/projetos'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/usuarios'
     | '/_authenticated/visao-geral'
+    | '/_authenticated/projetos/$slug'
     | '/_authenticated/projetos/'
   fileRoutesById: FileRoutesById
 }
@@ -104,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/usuarios': {
+      id: '/_authenticated/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/visao-geral': {
       id: '/_authenticated/visao-geral'
       path: '/visao-geral'
@@ -118,16 +158,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjetosIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/projetos/$slug': {
+      id: '/_authenticated/projetos/$slug'
+      path: '/projetos/$slug'
+      fullPath: '/projetos/$slug'
+      preLoaderRoute: typeof AuthenticatedProjetosSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
   AuthenticatedVisaoGeralRoute: typeof AuthenticatedVisaoGeralRoute
+  AuthenticatedProjetosSlugRoute: typeof AuthenticatedProjetosSlugRoute
   AuthenticatedProjetosIndexRoute: typeof AuthenticatedProjetosIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
   AuthenticatedVisaoGeralRoute: AuthenticatedVisaoGeralRoute,
+  AuthenticatedProjetosSlugRoute: AuthenticatedProjetosSlugRoute,
   AuthenticatedProjetosIndexRoute: AuthenticatedProjetosIndexRoute,
 }
 
