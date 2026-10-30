@@ -67,7 +67,7 @@ const mono = "font-mono text-xs";
 export function WidgetBody({ type, d, product, periodLabel }: { type: string; d: DashData; product: Product; periodLabel: string }) {
   switch (type as WidgetType) {
     case "success_gauge":
-      return <Gauge rate={summarize(d.inPeriod).rate} label={`${product.toUpperCase()} · ${periodLabel}`} />;
+      return <Gauge rate={summarize(d.inPeriod).rate} label={product.toUpperCase()} />;
     case "summary_cards": {
       const s = summarize(d.inPeriod);
       return (
