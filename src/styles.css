@@ -65,9 +65,9 @@
   --color-product: var(--product);
   --color-automation: var(--automation);
   --color-projection: var(--projection);
-  --font-sans: var(--font-sans);
-  --font-display: var(--font-display);
-  --font-mono: var(--font-mono);
+  --font-sans: var(--app-font-sans);
+  --font-display: var(--app-font-display);
+  --font-mono: var(--app-font-mono);
 }
 
 :root {
@@ -111,9 +111,9 @@
   --sidebar-accent-foreground: oklch(0.97 0.005 250);
   --sidebar-border: oklch(0.27 0.014 250);
   --sidebar-ring: oklch(0.7 0.15 245);
-  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --app-font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --app-font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --app-font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
 @layer base {
@@ -124,10 +124,10 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: var(--font-sans);
+    font-family: var(--app-font-sans);
   }
   h1, h2, h3 {
-    font-family: var(--font-display);
+    font-family: var(--app-font-display);
     letter-spacing: -0.02em;
   }
 }
