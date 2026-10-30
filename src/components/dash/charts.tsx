@@ -14,14 +14,14 @@ export function Gauge({ rate, label }: { rate: number | null; label: string }) {
     <div className="relative h-48">
       <ResponsiveContainer>
         <PieChart>
-          <Pie data={[{ v: rate }, { v: 100 - rate }]} dataKey="v" startAngle={200} endAngle={-20} innerRadius="72%" outerRadius="100%" cy="65%" stroke="none" isAnimationActive={false}>
+          <Pie data={[{ v: rate }, { v: 100 - rate }]} dataKey="v" startAngle={200} endAngle={-20} innerRadius="78%" outerRadius="100%" cy="70%" stroke="none" isAnimationActive={false}>
             <Cell fill={toneVar[tone]} />
             <Cell fill="var(--gauge-track)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      <div className="absolute inset-x-0 top-[48%] text-center">
-        <div className="font-mono text-4xl font-semibold" style={{ color: toneVar[tone] }}>{fmtPct(rate)}</div>
+      <div className="absolute inset-x-0 top-[58%] text-center">
+        <div className="font-mono text-3xl font-semibold" style={{ color: toneVar[tone] }}>{fmtPct(rate)}</div>
         <div className="mt-1 text-xs text-muted-foreground">{label} · {toneLabel}</div>
       </div>
     </div>

@@ -44,8 +44,8 @@ function FailuresPage() {
                 </Panel>
                 <StatCard label="Total de flaky tests" value={fmtInt(flaky.length)} hint={`Testes distintos — ${p}`} tone={flaky.length ? "warning" : "success"} />
               </div>
-              <div className="grid gap-4 lg:grid-cols-3">
-                <Panel title={`Detalhamento das falhas — ${p} — geral`} className="lg:col-span-2" info="Falhas definitivas agrupadas por teste e erro. Cada execução válida conta no máximo uma ocorrência.">
+              <div className="grid gap-4 xl:grid-cols-4">
+                <Panel title={`Detalhamento das falhas — ${p} — geral`} className="xl:col-span-3" info="Falhas definitivas agrupadas por teste e erro. Cada execução válida conta no máximo uma ocorrência.">
                   <DataTable rows={fails} empty="Nenhuma falha definitiva no período." initialSort={{ key: "occurrences", dir: "desc" }} columns={[
                     { key: "title", label: "Title" },
                     { key: "error", label: "Error", className: mono },

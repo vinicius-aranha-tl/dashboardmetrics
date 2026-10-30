@@ -112,7 +112,7 @@ export function buildMockDataset(now = new Date()) {
   return {
     executions,
     evolution: {
-      api: genEvolution(now, [631, 634, 638, 640, 643, 646, 648, 651, 653, 656, 657, 659], [0, 0, 0, 2, 4, 7, 11, 14, 18, 21, 25, 29]),
+      api: genEvolution(now, [631, 634, 638, 640, 643, 646, 648, 651, 653, 656, 657, 659], [0, 4, 12, 22, 35, 52, 70, 91, 113, 136, 160, 185]),
       ui: genEvolution(now, [138, 139, 141, 142, 144, 145, 147, 148, 149, 150, 151, 152], [52, 58, 63, 69, 75, 80, 86, 92, 98, 104, 110, 116]),
     } as Record<Product, EvolutionPoint[]>,
   };
