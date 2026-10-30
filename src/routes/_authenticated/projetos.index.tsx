@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -33,12 +33,16 @@ export const projectsQuery = {
   },
 };
 
+type Proj = { id: string; name: string; slug: string; description: string };
+
 const slugify = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 function ProjectsPage() {
   const { isAdmin } = useAuth();
   const q = useQuery(projectsQuery);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Proj | null>(null);
+  const [deleting, setDeleting] = useState<Proj | null>(null);
   const count = (p: NonNullable<typeof q.data>[number]) => [p.api_executions_url, p.api_evolution_url, p.ui_executions_url, p.ui_evolution_url].filter(Boolean).length;
   return (
     <>
@@ -54,10 +58,16 @@ function ProjectsPage() {
             <Link key={p.id} to="/projetos/$slug" params={{ slug: p.slug }} className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-primary"><FolderKanban className="h-5 w-5" /></div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="truncate font-display font-semibold group-hover:text-primary">{p.name}</div>
                   <div className="text-xs text-muted-foreground">Criado em {fmtDate(p.created_at.slice(0, 10))}</div>
                 </div>
+                {isAdmin && (
+                  <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" aria-label="Editar projeto" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(p); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Excluir projeto" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setDeleting(p); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  </div>
+                )}
               </div>
               {p.description && <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{p.description}</p>}
               <div className={`mt-4 text-xs ${count(p) === 4 ? "text-success" : "text-warning"}`}>{count(p)} de 4 fontes do GitHub conectadas</div>
@@ -66,6 +76,8 @@ function ProjectsPage() {
         </div>
       )}
       {open && <NewProjectDialog onClose={() => setOpen(false)} />}
+      {editing && <EditProjectDialog project={editing} onClose={() => setEditing(null)} />}
+      {deleting && <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />}
     </>
   );
 }
@@ -103,6 +115,72 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>Cancelar</Button>
           <Button disabled={!name.trim() || m.isPending} onClick={() => m.mutate()}>Criar projeto</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditProjectDialog({ project, onClose }: { project: Proj; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description);
+  const m = useMutation({
+    mutationFn: async () => {
+      const slug = slugify(name);
+      if (!slug) throw new Error("Informe um nome válido.");
+      const { error } = await supabase.from("projects").update({ name: name.trim(), slug, description: description.trim(), updated_at: new Date().toISOString() }).eq("id", project.id);
+      if (error) throw new Error(error.code === "23505" ? "Já existe um projeto com esse nome." : error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["dataset"] });
+      toast.success("Projeto atualizado.");
+      onClose();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Editar projeto</DialogTitle></DialogHeader>
+        <div className="grid gap-4">
+          <div className="grid gap-2"><Label htmlFor="en">Nome</Label><Input id="en" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} /></div>
+          <div className="grid gap-2"><Label htmlFor="ed">Descrição</Label><Textarea id="ed" value={description} maxLength={300} onChange={(e) => setDescription(e.target.value)} /></div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button disabled={!name.trim() || m.isPending} onClick={() => m.mutate()}>Salvar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteProjectDialog({ project, onClose }: { project: Proj; onClose: () => void }) {
+  const qc = useQueryClient();
+  const m = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("projects").delete().eq("id", project.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["projects"] });
+      qc.invalidateQueries({ queryKey: ["dataset"] });
+      qc.invalidateQueries({ queryKey: ["widgets"] });
+      toast.success("Projeto excluído.");
+      onClose();
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Excluir projeto</DialogTitle></DialogHeader>
+        <p className="text-sm text-muted-foreground">Tem certeza que deseja excluir <strong className="text-foreground">{project.name}</strong>? Os painéis e conexões desse projeto serão removidos. Essa ação não pode ser desfeita.</p>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          <Button variant="destructive" disabled={m.isPending} onClick={() => m.mutate()}>Excluir</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

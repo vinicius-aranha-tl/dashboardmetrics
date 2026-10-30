@@ -17,7 +17,7 @@ interface Behavior {
   flaky?: number;
 }
 
-const API_ROUTES = ["/recommendations", "/recommendations/home", "/products/{id}/similar", "/users/{id}/history", "/recommendations/feedback", "/catalog", "/campaigns", "/segments", "/health", "/cache", "/banners"];
+const API_ROUTES = ["/recommendations", "/items/home", "/products/{id}/similar", "/users/{id}/history", "/items/feedback", "/catalog", "/campaigns", "/segments", "/health", "/cache", "/banners"];
 const METHODS = ["GET", "POST", "PUT", "DELETE"];
 
 function apiTitles(): string[] {
@@ -27,28 +27,28 @@ function apiTitles(): string[] {
 }
 
 const API_BEHAVIOR: Behavior[] = [
-  { title: "POST /recommendations/feedback → 200", fail: { p: 0.35, error: "AssertionError: expected status 200 but got 500", detail: "Internal Server Error ao persistir feedback (FeedbackRepository.save)", cause: "Erro de servidor" } },
+  { title: "POST /items/feedback → 200", fail: { p: 0.35, error: "AssertionError: expected status 200 but got 500", detail: "Internal Server Error ao persistir feedback (FeedbackRepository.save)", cause: "Erro de servidor" } },
   { title: "GET /products/{id}/similar → 200", fail: { p: 0.22, error: "TimeoutError: request exceeded 10000ms", detail: "Serviço de similaridade não respondeu dentro do SLA", cause: "Timeout" } },
   { title: "GET /users/{id}/history → 200", fail: { p: 0.18, error: "SchemaError: /items/0/score must be number", detail: "Campo score retornado como string no payload", cause: "Contrato divergente" } },
   { title: "DELETE /cache → 200", fail: { p: 0.4, error: "AssertionError: expected status 200 but got 404", detail: "Rota removida no deploy, contrato ainda a documenta", cause: "Contrato divergente", olderThan: 40 } },
-  { title: "GET /recommendations/home → 200", flaky: 0.1 },
+  { title: "GET /items/home → 200", flaky: 0.1 },
   { title: "GET /campaigns → 200", flaky: 0.04 },
 ];
 
 const UI_TITLES = [
-  "Login SSO redireciona para vitrine", "Vitrine carrega banners", "Carrossel de recomendações exibe itens", "Filtro por categoria", "Busca retorna produtos",
-  "Detalhe do produto mostra similares", "Adicionar ao carrinho a partir da recomendação", "Checkout exibe carrossel de cross-sell", "Feedback positivo em recomendação", "Feedback negativo em recomendação",
-  "Histórico do usuário lista itens", "Paginação de vitrine", "Troca de idioma", "Logout limpa sessão", "Painel admin lista campanhas",
+  "Login SSO redireciona para home", "Home carrega banners", "Carrossel de destaques exibe itens", "Filtro por categoria", "Busca retorna produtos",
+  "Detalhe do produto mostra similares", "Adicionar ao carrinho a partir do destaque", "Checkout exibe carrossel de cross-sell", "Feedback positivo em item", "Feedback negativo em item",
+  "Histórico do usuário lista itens", "Paginação da listagem", "Troca de idioma", "Logout limpa sessão", "Painel admin lista campanhas",
   "Criar campanha", "Editar campanha", "Excluir campanha", "Criar segmento", "Editar segmento",
-  "Preview de recomendação", "Exportar relatório", "Acessibilidade da vitrine", "Modo mobile da vitrine", "Erro 404 amigável",
-  "Banner promocional clicável", "Lista de favoritos", "Remover favorito", "Notificações de recomendação", "Configurações do perfil",
+  "Preview de item", "Exportar relatório", "Acessibilidade da home", "Modo mobile da home", "Erro 404 amigável",
+  "Banner promocional clicável", "Lista de favoritos", "Remover favorito", "Notificações do sistema", "Configurações do perfil",
   "Upload de catálogo", "Validação de catálogo inválido", "Dashboard de métricas", "Permissões por perfil",
 ];
 
 const UI_BEHAVIOR: Behavior[] = [
   { title: "Checkout exibe carrossel de cross-sell", flaky: 0.15 },
-  { title: "Login SSO redireciona para vitrine", flaky: 0.05 },
-  { title: "Vitrine carrega banners", fail: { p: 0.3, error: "TimeoutError: locator('[data-testid=banner]') not found", detail: "Seletor alterado após refatoração do componente de banner", cause: "Seletor não encontrado", olderThan: 45 } },
+  { title: "Login SSO redireciona para home", flaky: 0.05 },
+  { title: "Home carrega banners", fail: { p: 0.3, error: "TimeoutError: locator('[data-testid=banner]') not found", detail: "Seletor alterado após refatoração do componente de banner", cause: "Seletor não encontrado", olderThan: 45 } },
 ];
 
 function genProduct(product: Product, titles: string[], behaviors: Behavior[], now: Date, seed: number, dataSource: string, prefix: string): Execution[] {
@@ -115,7 +115,7 @@ export function mockExecutions(project: { id: string; name: string }, product: P
 }
 
 export function mockEvolution(project: { id: string; slug: string }, product: Product, now = new Date()): EvolutionPoint[] {
-  if (project.slug === "recomenda") {
+  if (project.slug === "projeto-aranha") {
     return product === "api"
       ? genEvolution(now, [631, 634, 638, 640, 643, 646, 648, 651, 653, 656, 657, 659], [0, 4, 12, 22, 35, 52, 70, 91, 113, 136, 160, 185])
       : genEvolution(now, [138, 139, 141, 142, 144, 145, 147, 148, 149, 150, 151, 152], [52, 58, 63, 69, 75, 80, 86, 92, 98, 104, 110, 116]);

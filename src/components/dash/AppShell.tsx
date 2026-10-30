@@ -10,7 +10,7 @@ import { ORIGIN_LABEL, PERIOD_LABEL, useFilters, type PeriodKey } from "@/data/u
 import type { Trigger } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 
 const NAV = [
   { to: "/visao-geral", label: "Visão geral", icon: LayoutDashboard, admin: false },
