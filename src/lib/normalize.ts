@@ -146,3 +146,64 @@ export function normalizeEvolution(raw: unknown): EvolutionPoint[] {
     return { week, productConditions: p, automatedConditions: a, projectedAutomatedConditions: null };
   });
 }
+
+// ---------- Specialized failure/stability files ----------
+export const STABILITY_FILE = "test-stability-30d.json";
+export const REASONS_FILE = "failure-reasons-30d.json";
+export const LIFECYCLE_FILE = "failure-lifecycle.json";
+
+export interface StabilityRow { title: string; executions: number; failureExecutions: number; successRate: number | null; dataSource: string }
+export interface ReasonRow { cause: string; value: number }
+export interface SpecialFailureRow { title: string; error: string; detail: string; occurrences: number; dataSource: string; firstSeen: string; firstOccurrence: string; lastOccurrence: string }
+
+const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
+function needList(raw: unknown, key: string): Obj[] {
+  if (!isObj(raw) || !Array.isArray(raw[key])) throw new FormatError(`campo "${key}" ausente ou não é uma lista`);
+  return (raw[key] as unknown[]).filter(isObj);
+}
+/** title → error → detail; generic label only when none is published. */
+const titleOf = (o: Obj, i: number) => str(o["title"]) || str(o["name"]) || str(o["error"]) || str(o["detail"]) || `Falha sem detalhe ${i + 1}`;
+
+/** test-stability-30d.json → flaky rows (tests that failed at least once). */
+export function normalizeStability(raw: unknown, dataSource: string): StabilityRow[] {
+  return needList(raw, "tests")
+    .map((t, i) => {
+      const executions = num(t["executions"]);
+      const failureExecutions = num(pick(t, ["failureExecutions", "failures"]));
+      const sr = pick(t, ["successRatePercent", "successRate"]);
+      return {
+        title: str(t["title"]) || str(t["name"]) || `Teste ${i + 1}`,
+        executions, failureExecutions,
+        successRate: sr == null ? (executions ? Math.round(((executions - failureExecutions) / executions) * 10000) / 100 : null) : num(sr),
+        dataSource: str(t["dataSourceName"]) || dataSource,
+      };
+    })
+    .filter((r) => r.failureExecutions > 0);
+}
+
+/** failure-reasons-30d.json → { failures (table), reasons (donut, definitive failures only — flaky excluded) }. */
+export function normalizeReasons(raw: unknown, dataSource: string): { failures: SpecialFailureRow[]; reasons: ReasonRow[] } {
+  const failures = needList(raw, "failures").map((f, i) => failureRow(f, i, dataSource));
+  const reasons = needList(raw, "reasons")
+    .map((r) => ({ cause: str(r["reason"]) || "Sem classificação", value: num(pick(r, ["failedOccurrences", "occurrences"])) }))
+    .filter((r) => r.value > 0);
+  return { failures, reasons };
+}
+
+/** failure-lifecycle.json → lifetime failure rows, sorted by occurrences desc. */
+export function normalizeLifecycle(raw: unknown, dataSource: string): SpecialFailureRow[] {
+  const seen = new Map<string, string>();
+  if (isObj(raw) && Array.isArray(raw["tests"])) for (const t of raw["tests"] as unknown[]) if (isObj(t)) seen.set(str(t["testKey"]), str(t["firstSeen"]));
+  return needList(raw, "failures")
+    .map((f, i) => { const row = failureRow(f, i, dataSource); if (!row.firstSeen) row.firstSeen = seen.get(str(f["testKey"])) ?? ""; return row; })
+    .sort((a, b) => b.occurrences - a.occurrences);
+}
+
+function failureRow(f: Obj, i: number, dataSource: string): SpecialFailureRow {
+  return {
+    title: titleOf(f, i), error: str(f["error"]), detail: str(f["detail"]), occurrences: num(f["occurrences"]),
+    dataSource: str(f["dataSourceName"]) || dataSource,
+    firstSeen: str(f["firstSeen"]), firstOccurrence: str(f["firstOccurrence"]), lastOccurrence: str(f["lastOccurrence"]),
+  };
+}
