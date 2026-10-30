@@ -253,7 +253,7 @@ export type Projection =
 export function computeProjection(points: EvolutionPoint[]): Projection {
   const pts = [...points].sort((a, b) => a.week.localeCompare(b.week)).map((p) => ({ ...p, projectedAutomatedConditions: null }));
   if (!pts.length) return { status: "empty", series: [] };
-  const last = pts[pts.length - 1];
+  const last = pts[pts.length - 1]!;
   const currentGap = last.productConditions - last.automatedConditions;
   if (pts.length < MIN_POINTS_FOR_PROJECTION) return { status: "insufficient", series: pts.slice(-1), currentGap };
   const window = pts.slice(-8);
