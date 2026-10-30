@@ -100,7 +100,7 @@ function genEvolution(now: Date, product: number[], automated: number[]): Evolut
   return product.map((p, i) => {
     const d = new Date(end);
     d.setUTCDate(d.getUTCDate() - (n - 1 - i) * 7);
-    return { week: d.toISOString().slice(0, 10), productConditions: p, automatedConditions: automated[i], projectedAutomatedConditions: null };
+    return { week: d.toISOString().slice(0, 10), productConditions: p, automatedConditions: automated[i] ?? 0, projectedAutomatedConditions: null };
   });
 }
 

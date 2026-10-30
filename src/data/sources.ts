@@ -12,12 +12,12 @@ export interface Dataset {
 /** Source URLs come from env (VITE_* are public URLs, never tokens). */
 export const SOURCE_CONFIG = {
   api: {
-    executions: import.meta.env.VITE_API_EXECUTIONS_URL as string | undefined,
-    evolution: import.meta.env.VITE_API_EVOLUTION_URL as string | undefined,
+    executions: import.meta.env["VITE_API_EXECUTIONS_URL"] as string | undefined,
+    evolution: import.meta.env["VITE_API_EVOLUTION_URL"] as string | undefined,
   },
   ui: {
-    executions: import.meta.env.VITE_UI_EXECUTIONS_URL as string | undefined,
-    evolution: import.meta.env.VITE_UI_EVOLUTION_URL as string | undefined,
+    executions: import.meta.env["VITE_UI_EXECUTIONS_URL"] as string | undefined,
+    evolution: import.meta.env["VITE_UI_EVOLUTION_URL"] as string | undefined,
   },
 };
 
@@ -29,7 +29,7 @@ export const fetchGithubJson = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const u = new URL(data.url);
     if (!ALLOWED_HOSTS.includes(u.hostname)) throw new Error(`Host não permitido: ${u.hostname}`);
-    const token = process.env.GITHUB_TOKEN;
+    const token = process.env["GITHUB_TOKEN"];
     const res = await fetch(u, {
       headers: {
         Accept: u.hostname === "api.github.com" ? "application/vnd.github.raw+json" : "application/json",

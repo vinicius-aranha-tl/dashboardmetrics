@@ -68,7 +68,7 @@ export function CauseDonut({ data }: { data: { cause: string; value: number }[] 
 
 function EvoTooltip({ active, payload }: { active?: boolean; payload?: { payload: { week: string; productConditions: number | null; automatedConditions: number | null; projectedAutomatedConditions: number | null } }[] }) {
   if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
+  const p = payload[0]!.payload;
   const auto = p.automatedConditions ?? p.projectedAutomatedConditions;
   const projected = p.automatedConditions == null;
   return (

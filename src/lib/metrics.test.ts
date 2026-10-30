@@ -39,7 +39,7 @@ describe("dedup", () => {
   });
   it("counts a failure once per execution", () => {
     const rows = failureRows([ex({ results: [{ title: "a", status: "failed", error: "E" }, { title: "a", status: "failed", error: "E" }] })]);
-    expect(rows[0].occurrences).toBe(1);
+    expect(rows[0]?.occurrences).toBe(1);
   });
 });
 
@@ -51,7 +51,7 @@ describe("coverage", () => {
 });
 
 const pts = (p: number[], a: number[]): EvolutionPoint[] =>
-  p.map((v, i) => ({ week: `2026-0${1 + Math.floor(i / 4)}-${String(1 + (i % 4) * 7).padStart(2, "0")}`, productConditions: v, automatedConditions: a[i], projectedAutomatedConditions: null }));
+  p.map((v, i) => ({ week: `2026-0${1 + Math.floor(i / 4)}-${String(1 + (i % 4) * 7).padStart(2, "0")}`, productConditions: v, automatedConditions: a[i] ?? 0, projectedAutomatedConditions: null }));
 
 describe("projection", () => {
   it("insufficient history with fewer than 3 weeks", () => {
