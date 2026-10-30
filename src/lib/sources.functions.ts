@@ -114,25 +114,41 @@ export const loadDashboardData = createServerFn({ method: "POST" })
     return out;
   });
 
-export interface FileCheck { file: string; ok: boolean; records: number | null; message?: string }
+export interface FileCheck { file: string; ok: boolean; records: number | null; updatedAt: string | null; expected: boolean; message?: string }
 
-/** Tests every squaredup/ file of one repository and reports what was found. */
+/** Lists every file in squaredup/ and reads each one, reporting status, records and updatedAt. */
 export const testRepo = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
     owner: z.string().regex(nameRe), repo: z.string().regex(nameRe), branch: z.string().min(1).max(100).regex(/^[A-Za-z0-9_./-]+$/), product: z.enum(["api", "ui"]),
   }).parse(d))
   .handler(async ({ data }) => {
-    const files: FileCheck[] = await Promise.all(SQUAREDUP_FILES[data.product].map(async (file) => {
+    const tokenConfigured = Boolean(process.env["GITHUB_TOKEN"]);
+    const dirUrl = `https://api.github.com/repos/${encodeURIComponent(data.owner)}/${encodeURIComponent(data.repo)}/contents/squaredup?ref=${encodeURIComponent(data.branch)}`;
+    let names: string[];
+    try {
+      const dir = await fetchGithub(dirUrl, true);
+      if (!Array.isArray(dir)) throw new Error("squaredup/ não é uma pasta");
+      names = dir.filter((f) => f && f.type === "file" && String(f.name).endsWith(".json")).map((f) => String(f.name));
+    } catch (e) {
+      return { files: [] as FileCheck[], tokenConfigured, error: `Não foi possível listar squaredup/: ${(e as Error).message}` };
+    }
+    const expected = SQUAREDUP_FILES[data.product];
+    const all = [...new Set([...expected, ...names])];
+    const files: FileCheck[] = await Promise.all(all.map(async (file) => {
+      const isExpected = expected.includes(file);
+      if (!names.includes(file)) return { file, ok: false, records: null, updatedAt: null, expected: isExpected, message: "Arquivo não publicado na pasta." };
       try {
         const raw = await fetchGithub(contentsUrl(data.owner, data.repo, data.branch, file), true);
-        if (file === EXECUTIONS_FILE) normalizeExecutions(raw, data.product);
-        if (file === EVOLUTION_FILE[data.product]) normalizeEvolution(raw);
-        return { file, ok: true, records: countRecords(raw) };
+        let records = countRecords(raw);
+        if (file === EXECUTIONS_FILE) records = normalizeExecutions(raw, data.product).length;
+        if (file === EVOLUTION_FILE[data.product]) records = normalizeEvolution(raw).length;
+        const up = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>)["updatedAt"] : null;
+        return { file, ok: true, records, updatedAt: typeof up === "string" ? up : null, expected: isExpected };
       } catch (e) {
         const msg = e instanceof FormatError ? `Formato não reconhecido: ${e.message}` : (e as Error).message;
-        return { file, ok: false, records: null, message: msg };
+        return { file, ok: false, records: null, updatedAt: null, expected: isExpected, message: msg };
       }
     }));
-    return { files, tokenConfigured: Boolean(process.env["GITHUB_TOKEN"]) };
+    return { files, tokenConfigured, error: null as string | null };
   });

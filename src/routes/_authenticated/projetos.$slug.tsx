@@ -76,7 +76,7 @@ function SourcesForm({ project }: { project: Project }) {
   });
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
-  const [results, setResults] = useState<Partial<Record<Prod, { files: FileCheck[]; tokenConfigured: boolean } | { error: string }>>>({});
+  const [results, setResults] = useState<Partial<Record<Prod, { files: FileCheck[]; tokenConfigured: boolean; error: string | null }>>>({});
   const [testing, setTesting] = useState<Prod | null>(null);
   useEffect(() => setResults({}), [project.id]);
   const valid = /^[A-Za-z0-9_.-]{1,100}$/;
@@ -123,7 +123,7 @@ function SourcesForm({ project }: { project: Project }) {
       const out = await test({ data: { owner: r.owner.trim(), repo: r.name.trim(), branch: r.branch.trim() || "automation-metrics", product: pr } });
       setResults((s) => ({ ...s, [pr]: out }));
     } catch (e) {
-      setResults((s) => ({ ...s, [pr]: { error: (e as Error).message } }));
+      setResults((s) => ({ ...s, [pr]: { files: [], tokenConfigured: true, error: (e as Error).message } }));
     } finally {
       setTesting(null);
     }
@@ -158,15 +158,15 @@ function SourcesForm({ project }: { project: Project }) {
               <div className="grid gap-2"><Label htmlFor={`${pr}-b`}>Branch</Label><Input id={`${pr}-b`} disabled={!isAdmin} value={repos[pr].branch} onChange={(e) => setRepos((s) => ({ ...s, [pr]: { ...s[pr], branch: e.target.value } }))} /></div>
               <Button variant="secondary" disabled={!configured(pr) || testing === pr} onClick={() => runTest(pr)}><PlugZap className="h-4 w-4" /> {testing === pr ? "Testando…" : "Testar conexão"}</Button>
             </div>
-            {res && "error" in res && <p className="mt-3 text-xs text-danger">{res.error}</p>}
-            {res && "files" in res && (
+            {res?.error && <p className="mt-3 text-xs text-danger">{res.error}</p>}
+            {res && res.files.length > 0 && (
               <div className="mt-4 grid gap-1.5">
                 {!res.tokenConfigured && <p className="text-xs text-warning">O token de leitura do GitHub ainda não foi configurado no servidor.</p>}
                 {res.files.map((f) => (
                   <div key={f.file} className="flex items-start gap-2 text-xs">
                     {f.ok ? <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" /> : <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />}
                     <span className="font-mono">squaredup/{f.file}</span>
-                    <span className={f.ok ? "text-muted-foreground" : "text-danger"}>{f.ok ? `${f.records ?? "?"} registros` : f.message}</span>
+                    <span className={f.ok ? "text-muted-foreground" : "text-danger"}>{f.ok ? `${f.records ?? "?"} registros${f.updatedAt ? ` · atualizado em ${new Date(f.updatedAt).toLocaleString("pt-BR")}` : ""}` : f.message}</span>
                   </div>
                 ))}
               </div>

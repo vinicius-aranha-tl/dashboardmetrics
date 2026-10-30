@@ -27,3 +27,17 @@ describe("normalizeEvolution", () => {
     expect(() => normalizeEvolution([{ week: "2026-10-30" }])).toThrow(FormatError);
   });
 });
+
+describe("formato real squaredup", () => {
+  const history = { schemaVersion: 1, executions: [{ generatedAt: "2026-10-30T17:03:24.602Z", workflow: "Testes API", run: { id: "41095166285", attempt: 1, event: "schedule" }, tests: { available: true, total: 88, passed: 86, failed: 1, flaky: 1, errors: 0 }, flakyTests: [{ title: "GET /x" }], testResults: [] }] };
+  it("rebuilds results from summary counts", () => {
+    const [e] = normalizeExecutions(history, "api");
+    expect(e).toMatchObject({ id: "41095166285", runAttempt: 1, trigger: "scheduled", date: "2026-10-30" });
+    expect(e!.results).toHaveLength(88);
+    expect(e!.results.filter((r) => r.status === "failed")).toHaveLength(1);
+    expect(e!.results.find((r) => r.status === "flaky")!.title).toBe("GET /x");
+  });
+  it("reads evolution points", () => {
+    expect(normalizeEvolution({ points: [{ week: "2026-10-30", productConditions: 659, automatedConditions: 0 }] })[0]!.productConditions).toBe(659);
+  });
+});
