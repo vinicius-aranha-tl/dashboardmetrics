@@ -47,7 +47,7 @@ function ProjectPage() {
   return (
     <>
       <Link to="/projetos" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3 w-3" /> Projetos</Link>
-      <PageTitle title={p.name} subtitle={p.description || undefined} />
+      <PageTitle title={p.name} subtitle={p.description} />
       <Tabs value={tab} onValueChange={(v) => navigate({ search: v === "fontes" ? { tab: "fontes" } : {} })} className="mb-5">
         <TabsList>
           <TabsTrigger value="painel">Painéis</TabsTrigger>

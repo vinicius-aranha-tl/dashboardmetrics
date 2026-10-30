@@ -80,7 +80,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
       const slug = slugify(name);
       if (!slug) throw new Error("Informe um nome válido.");
       const { data: u } = await supabase.auth.getUser();
-      const { error } = await supabase.from("projects").insert({ name: name.trim(), slug, description: description.trim(), created_by: u.user?.id });
+      const { error } = await supabase.from("projects").insert({ name: name.trim(), slug, description: description.trim(), created_by: u.user?.id ?? null });
       if (error) throw new Error(error.code === "23505" ? "Já existe um projeto com esse nome." : error.message);
       return slug;
     },
