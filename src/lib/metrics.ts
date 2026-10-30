@@ -284,3 +284,16 @@ export function computeProjection(points: EvolutionPoint[]): Projection {
     weeksRemaining,
   };
 }
+
+/** Sums several projects' weekly evolution into one series (weeks aligned by date). */
+export function aggregateEvolution(series: EvolutionPoint[][]): EvolutionPoint[] {
+  const m = new Map<string, EvolutionPoint>();
+  for (const s of series)
+    for (const p of s) {
+      const cur = m.get(p.week) ?? { week: p.week, productConditions: 0, automatedConditions: 0, projectedAutomatedConditions: null };
+      cur.productConditions += p.productConditions;
+      cur.automatedConditions += p.automatedConditions;
+      m.set(p.week, cur);
+    }
+  return [...m.values()].sort((a, b) => a.week.localeCompare(b.week));
+}
