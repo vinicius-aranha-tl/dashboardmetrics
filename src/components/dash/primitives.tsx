@@ -16,9 +16,9 @@ export function InfoTip({ children }: { children: ReactNode }) {
   );
 }
 
-export function Panel({ title, info, children, className, action }: { title: string; info?: ReactNode; children: ReactNode; className?: string; action?: ReactNode }) {
+export function Panel({ title, info, children, className, action, pdfInfo }: { title: string; info?: ReactNode; children: ReactNode; className?: string; action?: ReactNode; pdfInfo?: string }) {
   return (
-    <section className={cn("rounded-xl border border-border bg-card p-5", className)}>
+    <section className={cn("rounded-xl border border-border bg-card p-5", className)} data-pdf-panel={pdfInfo === undefined ? undefined : ""} data-pdf-info={pdfInfo}>
       <header className="mb-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-card-foreground">{title}</h2>

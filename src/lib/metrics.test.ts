@@ -66,3 +66,22 @@ describe("projection", () => {
     if (r.status === "parity") expect(r.weeksRemaining).toBe(Math.ceil(72 / 9));
   });
 });
+
+import { coverageWaterfall as _cw, topFailingTests as _tf } from "./metrics";
+describe("novos gráficos", () => {
+  it("cascata: primeira barra é o total inicial, depois variações semanais", () => {
+    const r = _cw([
+      { week: "2026-01-05", productConditions: 100, automatedConditions: 10, projectedAutomatedConditions: null },
+      { week: "2026-01-12", productConditions: 100, automatedConditions: 15, projectedAutomatedConditions: null },
+      { week: "2026-01-19", productConditions: 100, automatedConditions: 12, projectedAutomatedConditions: null },
+    ]);
+    expect(r.map((x) => x.delta)).toEqual([10, 5, -3]);
+    expect(r[2]!.base).toBe(12);
+  });
+  it("ranking de falhas soma ocorrências por teste e limita a 10", () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({ title: `t${i % 11}`, error: "", detail: "", cause: "", occurrences: 1, dataSource: "", firstSeen: "", firstOccurrence: "", lastOccurrence: "" }));
+    const r = _tf(rows);
+    expect(r).toHaveLength(10);
+    expect(r[0]).toEqual({ title: "t0", value: 2 });
+  });
+});

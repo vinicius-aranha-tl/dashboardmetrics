@@ -54,7 +54,7 @@ function ProjectPage() {
           <TabsTrigger value="fontes">Fontes do GitHub</TabsTrigger>
         </TabsList>
       </Tabs>
-      {tab === "painel" ? <Dashboard projectId={p.id} slug={p.slug} /> : <SourcesForm project={p} />}
+      {tab === "painel" ? <Dashboard projectId={p.id} slug={p.slug} name={p.name} /> : <SourcesForm project={p} />}
     </>
   );
 }
