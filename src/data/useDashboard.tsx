@@ -53,7 +53,7 @@ export function useDashboardData(slug: string | null, product: Product) {
       allHistory: filterExecutions(valid, { ...base, periodDays: null }),
       evolution: aggregateEvolution(q.data.map((p) => p.evolution[product])),
       periodDays,
-      special: buildSpecial(q.data, dedupeExecutions(all), now),
+      special: buildSpecial(q.data, now),
     };
   }, [q.data, filters, product]);
   return { ...q, d, periodLabel: PERIOD_LABEL[filters.period] };
@@ -71,17 +71,17 @@ export interface SpecialData {
 }
 
 /** API + UI grouped. Specialized file is primary; history.json only when the file is missing/failed (demo projects use their demo history). */
-export function buildSpecial(projects: ProjectData[], valid: ReturnType<typeof dedupeExecutions>, now: Date): SpecialData {
+export function buildSpecial(projects: ProjectData[], now: Date): SpecialData {
   const out: SpecialData = { flaky: { rows: [], used: [] }, failures: { rows: [], used: [] }, reasons: { rows: [], used: [] }, lifecycle: { rows: [], used: [] } };
   const origins: Trigger[] = ["scheduled", "post-merge", "manual"];
   const use = (list: SourceUse[], u: SourceUse) => { if (!list.some((x) => x.product === u.product && x.file === u.file && x.fallback === u.fallback)) list.push(u); };
   for (const p of projects)
     for (const product of ["api", "ui"] as const) {
       const sp = p.special?.[product];
-      const mine = valid.filter((e) => e.product === product && e.triggerId.startsWith(p.project.id) || (e.product === product && e.dataSource.startsWith(p.project.name)));
+      const mine = dedupeExecutions(p.executions).filter((e) => e.product === product);
       const d30 = filterExecutions(mine, { product, origins, periodDays: 30, now });
       const reason = (s?: { status: { mode: string; message?: string } }) => (s?.status.mode === "error" ? s.status.message : s?.status.mode === "demo" ? "fonte não configurada (demonstração)" : undefined);
-      const fb = (f: SpecialData[keyof SpecialData]["used"], s: typeof sp.stability | undefined) => use(f, { product, file: "history.json", fallback: true, reason: reason(s) });
+      const fb = (f: SpecialData[keyof SpecialData]["used"], s: { status: { mode: string; message?: string } } | undefined) => use(f, { product, file: "history.json", fallback: true, reason: reason(s) });
 
       if (sp?.stability.data) { out.flaky.rows.push(...sp.stability.data); use(out.flaky.used, { product, file: sp.stability.file, fallback: false }); }
       else { out.flaky.rows.push(...flakyTable(d30).map((r) => ({ ...r, successRate: r.executions ? Math.round(((r.executions - r.failureExecutions) / r.executions) * 10000) / 100 : null }))); fb(out.flaky.used, sp?.stability); }

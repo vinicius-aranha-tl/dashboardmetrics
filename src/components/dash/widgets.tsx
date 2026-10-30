@@ -3,7 +3,7 @@ import { CauseDonut, CoverageWaterfall, DailyChart, DailyColumns, EvolutionChart
 import type { ChartKind } from "./chartKinds";
 import { ORIGIN_LABEL } from "@/data/useDashboard";
 import { EmptyState, StatCard, fmtDate, fmtInt, fmtPct } from "./primitives";
-import type { DashData } from "@/data/useDashboard";
+import type { DashData, SourceUse } from "@/data/useDashboard";
 import { causeDistribution, computeProjection, coverageWaterfall, dailyRate, dailyResults, failureHeatmap, qualityFunnel, rateByOrigin, testStability, topFailingTests, failureRows, flakyTable, summarize, testCount, type Product, type Projection } from "@/lib/metrics";
 
 export const RATE_INFO = "Taxa = (aprovados + flaky) ÷ total de resultados. Flaky terminou aprovado após retry interno e não reduz o sucesso. Falha = teste que falhou definitivamente. Reruns da mesma Action são ignorados; só conta a primeira tentativa de cada gatilho. Verde ≥ 90%, amarelo 80–89,99%, vermelho < 80%.";
@@ -132,41 +132,60 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
       failureRows(d.inPeriod).forEach((r) => { const c = m.get(r.cause) ?? new Map(); c.set(r.title, (c.get(r.title) ?? 0) + r.occurrences); m.set(r.cause, c); });
       return <FailureTreemap data={[...m.entries()].map(([name, c]) => ({ name, children: [...c.entries()].map(([n, size]) => ({ name: n, size })) }))} />;
     }
-    case "flaky_table":
+    case "flaky_table": {
+      const f = d.special.flaky;
       return (
-        <DataTable rows={flakyTable(d.inPeriod) as unknown as Row[]} empty="Nenhum flaky test no período." initialSort={{ key: "failureExecutions", dir: "desc" }} columns={[
-          { key: "title", label: "Title" },
-          { key: "executions", label: "Executions", numeric: true },
-          { key: "failureExecutions", label: "Failure Executions", numeric: true },
-          { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
-        ]} />
+        <>
+          <SourceUsed used={f.used} />
+          <div className="grid gap-3 lg:grid-cols-[1fr_180px]">
+            <DataTable rows={f.rows as unknown as Row[]} empty="Nenhum flaky test nos últimos 30 dias." initialSort={{ key: "failureExecutions", dir: "desc" }} columns={[
+              { key: "title", label: "Title" },
+              { key: "executions", label: "Executions", numeric: true },
+              { key: "failureExecutions", label: "Failure Executions", numeric: true },
+              { key: "successRate", label: "Success Rate", numeric: true, render: (r) => (r["successRate"] == null ? "—" : fmtPct(Number(r["successRate"]))) },
+              { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
+            ]} />
+            <StatCard label="Testes flaky distintos" value={fmtInt(new Set(f.rows.map((r) => `${r.dataSource}|${r.title}`)).size)} tone={f.rows.length ? "warning" : "success"} />
+          </div>
+        </>
       );
-    case "failure_details":
+    }
+    case "failure_details": {
+      const f = d.special.failures;
       return (
-        <DataTable rows={failureRows(d.inPeriod) as unknown as Row[]} empty="Nenhuma falha definitiva no período." initialSort={{ key: "occurrences", dir: "desc" }} columns={[
-          { key: "title", label: "Title" },
-          { key: "error", label: "Error", className: mono },
-          { key: "detail", label: "Detail", className: "text-muted-foreground" },
-          { key: "occurrences", label: "Occurrences", numeric: true },
-          { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
-          { key: "lastOccurrence", label: "Last Occurrence", render: (r) => fmtDate(String(r["lastOccurrence"])) },
-        ]} />
+        <>
+          <SourceUsed used={f.used} />
+          <DataTable rows={f.rows as unknown as Row[]} empty="Nenhuma falha definitiva nos últimos 30 dias." initialSort={{ key: "occurrences", dir: "desc" }} columns={[
+            { key: "title", label: "Title" },
+            { key: "error", label: "Error", className: mono },
+            { key: "detail", label: "Detail", className: "text-muted-foreground" },
+            { key: "occurrences", label: "Occurrences", numeric: true },
+            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => fmtDate(String(r["lastOccurrence"])) },
+            { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
+          ]} />
+        </>
       );
+    }
     case "cause_donut":
-      return <CauseDonut data={causeDistribution(failureRows(d.inPeriod))} />;
-    case "failure_history":
+      return (<><SourceUsed used={d.special.reasons.used} /><CauseDonut data={d.special.reasons.rows} /></>);
+    case "failure_history": {
+      const f = d.special.lifecycle;
       return (
-        <DataTable rows={failureRows(d.allHistory) as unknown as Row[]} empty="Nenhuma falha registrada." initialSort={{ key: "occurrences", dir: "desc" }} columns={[
-          { key: "title", label: "Title" },
-          { key: "error", label: "Error", className: mono },
-          { key: "detail", label: "Detail", className: "text-muted-foreground" },
-          { key: "occurrences", label: "Occurrences", numeric: true },
-          { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
-          { key: "firstSeen", label: "First Seen", render: (r) => fmtDate(String(r["firstSeen"])) },
-          { key: "firstOccurrence", label: "First Occurrence", render: (r) => fmtDate(String(r["firstOccurrence"])) },
-          { key: "lastOccurrence", label: "Last Occurrence", render: (r) => fmtDate(String(r["lastOccurrence"])) },
-        ]} />
+        <>
+          <SourceUsed used={f.used} />
+          <DataTable rows={f.rows as unknown as Row[]} empty="Nenhuma falha registrada." initialSort={{ key: "occurrences", dir: "desc" }} columns={[
+            { key: "title", label: "Title" },
+            { key: "error", label: "Error", className: mono },
+            { key: "detail", label: "Detail", className: "text-muted-foreground" },
+            { key: "occurrences", label: "Occurrences", numeric: true },
+            { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
+            { key: "firstSeen", label: "First Seen", render: (r) => (r["firstSeen"] ? fmtDate(String(r["firstSeen"])) : "—") },
+            { key: "firstOccurrence", label: "First Occurrence", render: (r) => (r["firstOccurrence"] ? fmtDate(String(r["firstOccurrence"])) : "—") },
+            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => (r["lastOccurrence"] ? fmtDate(String(r["lastOccurrence"])) : "—") },
+          ]} />
+        </>
       );
+    }
     case "project_ranking": {
       const rows = d.projects.map((p) => {
         const ex = d.inPeriod.filter((e) => e.triggerId.startsWith(p.project.id));
@@ -193,4 +212,18 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
     default:
       return <EmptyState>Tipo de gráfico desconhecido: {type}</EmptyState>;
   }
+}
+
+/** Shows which file fed the panel, per product; fallback to history.json is highlighted with its reason. */
+function SourceUsed({ used }: { used: SourceUse[] }) {
+  if (!used.length) return null;
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5 text-[11px]">
+      {used.map((u, i) => (
+        <span key={i} title={u.reason} className={`rounded border px-1.5 py-0.5 font-mono ${u.fallback ? "border-warning/50 bg-warning/10 text-warning" : "border-border text-muted-foreground"}`}>
+          {u.product.toUpperCase()}: {u.file}{u.fallback ? ` (fallback${u.reason ? ` — ${u.reason}` : ""})` : ""}
+        </span>
+      ))}
+    </div>
+  );
 }
