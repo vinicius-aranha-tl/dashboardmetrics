@@ -69,40 +69,63 @@ function toTrigger(v: unknown): Trigger {
 
 export class FormatError extends Error {}
 
+function readTest(t: unknown, where: string): TestResult {
+  if (!isObj(t)) throw new FormatError(`${where} não é um objeto`);
+  const title = pick(t, ["title", "name", "test"]);
+  const status = toStatus(pick(t, ["status", "outcome", "result"]));
+  if (typeof title !== "string") throw new FormatError(`${where}.title ausente`);
+  if (!status) throw new FormatError(`${where}.status desconhecido`);
+  const str = (k: string[]) => { const v = pick(t, k); return v == null ? undefined : String(v); };
+  const r: TestResult = { title, status };
+  const error = str(["error", "message"]), detail = str(["detail", "details", "stack"]), cause = str(["cause", "reason", "category"]);
+  if (error) r.error = error;
+  if (detail) r.detail = detail;
+  if (cause) r.cause = cause;
+  return r;
+}
+
+/** Per-test list when published; otherwise rebuilt from the summary counts (tests.passed/failed/flaky). */
+function readResults(item: Obj, i: number): TestResult[] {
+  const list = pick(item, ["results", "testResults"]);
+  if (Array.isArray(list) && list.length) return list.map((t, j) => readTest(t, `[${i}].testResults[${j}]`));
+  const sum = isObj(item["tests"]) ? (item["tests"] as Obj) : null;
+  if (Array.isArray(item["tests"])) return (item["tests"] as unknown[]).map((t, j) => readTest(t, `[${i}].tests[${j}]`));
+  if (!sum) throw new FormatError(`[${i}].tests ausente (resumo ou lista de testes)`);
+  if (sum["available"] === false) return [];
+  const n = (k: string) => { const v = Number(sum[k] ?? 0); return Number.isFinite(v) ? v : 0; };
+  const failed = n("failed") + n("errors");
+  const flakyList = Array.isArray(item["flakyTests"]) ? (item["flakyTests"] as unknown[]) : [];
+  const flakyTitles = flakyList.map((f, k) => (isObj(f) ? String(pick(f, ["title", "name"]) ?? `Teste instável ${k + 1}`) : String(f)));
+  const flaky = Math.max(n("flaky"), flakyTitles.length);
+  const total = Math.max(n("total"), n("passed") + failed + flaky);
+  const out: TestResult[] = [];
+  for (let k = 0; k < flaky; k++) out.push({ title: flakyTitles[k] ?? `Teste instável ${k + 1}`, status: "flaky" });
+  for (let k = 0; k < failed; k++) out.push({ title: `Falha sem detalhe ${k + 1}`, status: "failed", cause: "Sem detalhe publicado" });
+  for (let k = out.length; k < total; k++) out.push({ title: `Teste ${k + 1}`, status: "passed" });
+  return out;
+}
+
 /** Normalizes a history file into executions. Throws FormatError naming the first invalid field. */
 export function normalizeExecutions(raw: unknown, product: Product): Execution[] {
   const list = extractList(raw, ["executions", "runs", "history", "items", "data"]);
   if (!list) throw new FormatError("lista de execuções não encontrada (esperado array ou campo executions/runs/history)");
   return list.map((item, i) => {
     if (!isObj(item)) throw new FormatError(`[${i}] não é um objeto`);
-    const date = toDate(pick(item, ["date", "startedAt", "started_at", "createdAt", "created_at", "timestamp"]));
-    if (!date) throw new FormatError(`[${i}].date ausente ou inválida`);
-    const id = String(pick(item, ["id", "runId", "run_id"]) ?? `${date}-${i}`);
-    const attempt = Number(pick(item, ["runAttempt", "run_attempt", "attempt"]) ?? 1);
-    const triggerId = String(pick(item, ["triggerId", "trigger_id", "runId", "run_id", "id"]) ?? id);
-    const testsRaw = pick(item, ["results", "tests", "testResults"]);
-    if (!Array.isArray(testsRaw)) throw new FormatError(`[${i}].results ausente (lista de testes)`);
-    const results: TestResult[] = testsRaw.map((t, j) => {
-      if (!isObj(t)) throw new FormatError(`[${i}].results[${j}] não é um objeto`);
-      const title = pick(t, ["title", "name", "test"]);
-      const status = toStatus(pick(t, ["status", "outcome", "result"]));
-      if (typeof title !== "string") throw new FormatError(`[${i}].results[${j}].title ausente`);
-      if (!status) throw new FormatError(`[${i}].results[${j}].status desconhecido`);
-      const str = (k: string[]) => { const v = pick(t, k); return v == null ? undefined : String(v); };
-      const r: TestResult = { title, status };
-      const error = str(["error", "message"]), detail = str(["detail", "details", "stack"]), cause = str(["cause", "reason", "category"]);
-      if (error) r.error = error;
-      if (detail) r.detail = detail;
-      if (cause) r.cause = cause;
-      return r;
-    });
-    return { id, product, triggerId, runAttempt: Number.isFinite(attempt) && attempt >= 1 ? attempt : 1, trigger: toTrigger(pick(item, ["trigger", "event", "origin"])), date, results, dataSource: String(pick(item, ["dataSource", "data_source"]) ?? product.toUpperCase()) };
+    const run = isObj(item["run"]) ? (item["run"] as Obj) : {};
+    const date = toDate(pick(item, ["date", "generatedAt", "startedAt", "started_at", "createdAt", "created_at", "timestamp"]));
+    if (!date) throw new FormatError(`[${i}].date/generatedAt ausente ou inválida`);
+    const id = String(pick(run, ["id"]) ?? pick(item, ["id", "runId", "run_id"]) ?? `${date}-${i}`);
+    const attempt = Number(pick(run, ["attempt"]) ?? pick(item, ["runAttempt", "run_attempt", "attempt"]) ?? 1);
+    const triggerId = String(pick(item, ["triggerId", "trigger_id"]) ?? id);
+    const trigger = toTrigger(pick(run, ["event"]) ?? pick(item, ["trigger", "event", "origin"]));
+    const results = readResults(item, i);
+    return { id, product, triggerId, runAttempt: Number.isFinite(attempt) && attempt >= 1 ? attempt : 1, trigger, date, results, dataSource: String(pick(item, ["dataSource", "data_source", "workflow"]) ?? product.toUpperCase()) };
   });
 }
 
 /** Normalizes a weekly evolution file. */
 export function normalizeEvolution(raw: unknown): EvolutionPoint[] {
-  const list = extractList(raw, ["weeks", "evolution", "history", "items", "data"]);
+  const list = extractList(raw, ["points", "weeks", "evolution", "history", "items", "data"]);
   if (!list) throw new FormatError("lista semanal não encontrada (esperado array ou campo weeks/evolution/history)");
   return list.map((item, i) => {
     if (!isObj(item)) throw new FormatError(`[${i}] não é um objeto`);
