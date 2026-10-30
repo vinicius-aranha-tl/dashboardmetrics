@@ -51,12 +51,7 @@ const UI_BEHAVIOR: Behavior[] = [
   { title: "Vitrine carrega banners", fail: { p: 0.3, error: "TimeoutError: locator('[data-testid=banner]') not found", detail: "Seletor alterado após refatoração do componente de banner", cause: "Seletor não encontrado", olderThan: 45 } },
 ];
 
-const DATA_SOURCE: Record<Product, string> = {
-  api: "recomenda-api-tests · GitHub Actions",
-  ui: "recomenda-ui-tests · GitHub Actions",
-};
-
-function genProduct(product: Product, titles: string[], behaviors: Behavior[], now: Date, seed: number): Execution[] {
+function genProduct(product: Product, titles: string[], behaviors: Behavior[], now: Date, seed: number, dataSource: string, prefix: string): Execution[] {
   const rand = rng(seed);
   const byTitle = new Map(behaviors.map((b) => [b.title, b]));
   const out: Execution[] = [];
@@ -75,12 +70,12 @@ function genProduct(product: Product, titles: string[], behaviors: Behavior[], n
         if (b?.flaky && rand() < b.flaky) return { title, status: "flaky" };
         return { title, status: "passed" };
       });
-      const triggerId = `${product}-${date}-${trigger}-${ti}`;
-      const base = { product, triggerId, trigger, date, dataSource: DATA_SOURCE[product] };
+      const triggerId = `${prefix}-${product}-${date}-${trigger}-${ti}`;
+      const base = { product, triggerId, trigger, date, dataSource };
       out.push({ ...base, id: `${triggerId}-a1`, runAttempt: 1, results });
-      // Simulate a manual rerun of the same Action when it failed: must be ignored by metrics.
+      // Simulated rerun of the same Action after a failure: must be ignored by metrics.
       if (results.some((r) => r.status === "failed") && rand() < 0.6) {
-        out.push({ ...base, id: `${triggerId}-a2`, runAttempt: 2, results: results.map((r) => ({ title: r.title, status: "passed" })) });
+        out.push({ ...base, id: `${triggerId}-a2`, runAttempt: 2, results: results.map((r) => ({ title: r.title, status: "passed" as const })) });
       }
     });
   }
@@ -104,16 +99,37 @@ function genEvolution(now: Date, product: number[], automated: number[]): Evolut
   });
 }
 
-export function buildMockDataset(now = new Date()) {
-  const executions = [
-    ...genProduct("api", apiTitles(), API_BEHAVIOR, now, 42),
-    ...genProduct("ui", UI_TITLES, UI_BEHAVIOR, now, 7),
-  ];
-  return {
-    executions,
-    evolution: {
-      api: genEvolution(now, [631, 634, 638, 640, 643, 646, 648, 651, 653, 656, 657, 659], [0, 4, 12, 22, 35, 52, 70, 91, 113, 136, 160, 185]),
-      ui: genEvolution(now, [138, 139, 141, 142, 144, 145, 147, 148, 149, 150, 151, 152], [52, 58, 63, 69, 75, 80, 86, 92, 98, 104, 110, 116]),
-    } as Record<Product, EvolutionPoint[]>,
-  };
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** Demonstration data for one project source. Deterministic per project. */
+export function mockExecutions(project: { id: string; name: string }, product: Product, now = new Date()): Execution[] {
+  const seed = hash(project.id + product);
+  const ds = `${project.name} · ${product.toUpperCase()}`;
+  return product === "api"
+    ? genProduct("api", apiTitles(), API_BEHAVIOR, now, seed, ds, project.id)
+    : genProduct("ui", UI_TITLES, UI_BEHAVIOR, now, seed, ds, project.id);
+}
+
+export function mockEvolution(project: { id: string; slug: string }, product: Product, now = new Date()): EvolutionPoint[] {
+  if (project.slug === "recomenda") {
+    return product === "api"
+      ? genEvolution(now, [631, 634, 638, 640, 643, 646, 648, 651, 653, 656, 657, 659], [0, 4, 12, 22, 35, 52, 70, 91, 113, 136, 160, 185])
+      : genEvolution(now, [138, 139, 141, 142, 144, 145, 147, 148, 149, 150, 151, 152], [52, 58, 63, 69, 75, 80, 86, 92, 98, 104, 110, 116]);
+  }
+  const r = rng(hash(project.id + product + "evo"));
+  const base = Math.round((product === "api" ? 200 : 60) + r() * 300);
+  const pv = 1 + Math.round(r() * 4);
+  const av = pv + Math.round(r() * 12) - 2;
+  const p: number[] = [], a: number[] = [];
+  let auto = Math.round(base * r() * 0.3);
+  for (let i = 0; i < 12; i++) {
+    p.push(base + pv * i);
+    auto = Math.min(base + pv * i, Math.max(0, auto + av + Math.round((r() - 0.5) * 4)));
+    a.push(auto);
+  }
+  return genEvolution(now, p, a);
 }
