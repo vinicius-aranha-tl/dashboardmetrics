@@ -10,7 +10,7 @@ import { ORIGIN_LABEL, PERIOD_LABEL, requestForcedRefresh, useFilters, type Peri
 import type { Trigger } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.6.0";
 
 const NAV = [
   { to: "/visao-geral", label: "Visão geral", icon: LayoutDashboard, admin: false },
