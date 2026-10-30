@@ -69,6 +69,12 @@ function toTrigger(v: unknown): Trigger {
 
 export class FormatError extends Error {}
 
+function describe(raw: unknown): string {
+  if (Array.isArray(raw)) return "array";
+  if (isObj(raw)) return `campos ${Object.keys(raw).slice(0, 8).join(", ") || "nenhum"}`;
+  return typeof raw;
+}
+
 function readTest(t: unknown, where: string): TestResult {
   if (!isObj(t)) throw new FormatError(`${where} não é um objeto`);
   const title = pick(t, ["title", "name", "test"]);
@@ -110,7 +116,7 @@ function readResults(item: Obj, i: number): TestResult[] {
 /** Normalizes a history file into executions. Throws FormatError naming the first invalid field. */
 export function normalizeExecutions(raw: unknown, product: Product): Execution[] {
   const list = extractList(raw, ["executions", "runs", "history", "items", "data"]);
-  if (!list) throw new FormatError("lista de execuções não encontrada (esperado array ou campo executions/runs/history)");
+  if (!list) throw new FormatError(`lista de execuções não encontrada (esperado array ou campo executions/runs/history; encontrado: ${describe(raw)})`);
   return list.map((item, i) => {
     if (!isObj(item)) throw new FormatError(`[${i}] não é um objeto`);
     const run = isObj(item["run"]) ? (item["run"] as Obj) : {};
