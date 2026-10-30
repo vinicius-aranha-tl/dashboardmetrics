@@ -62,7 +62,7 @@ export function useDashboardData(slug: string | null, product: Product) {
 export type DashData = NonNullable<ReturnType<typeof useDashboardData>["d"]>;
 
 /** Where a specialized panel's rows came from, per product. */
-export interface SourceUse { product: Product; file: string; fallback: boolean; reason?: string }
+export interface SourceUse { product: Product; file: string; fallback: boolean; reason?: string | undefined }
 export interface SpecialData {
   flaky: { rows: StabilityRow[]; used: SourceUse[] };
   failures: { rows: SpecialFailureRow[]; used: SourceUse[] };
