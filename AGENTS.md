@@ -10,7 +10,9 @@
 <!-- LOVABLE:END -->
 
 ## Architecture rules
-- Business rules for metrics (success rate, rerun dedup, failure grouping, coverage, projection) live as pure functions in `src/lib/metrics.ts` with tests in `metrics.test.ts` — keeps rules verifiable without UI.
-- Data access goes through `src/data/sources.ts` (env-configured JSON sources, mock fallback); remote JSON is fetched only via the server function proxy so GitHub tokens never reach the browser.
-- Global filters live in `FiltersProvider` (`src/data/useDashboard.tsx`); pages derive views from the deduped dataset there.
+- Business rules for metrics (success rate, rerun dedup, failure grouping, coverage, projection, cross-project aggregation) live as pure functions in `src/lib/metrics.ts` with tests in `metrics.test.ts` — keeps rules verifiable without UI.
+- Projects (with their 4 GitHub JSON source URLs) and dashboard widgets live in the database; widget rows with `project_id` null belong to the overview. No rows = code defaults, materialized on first edit.
+- GitHub JSON is fetched only in `src/lib/sources.functions.ts` (authenticated server fn, `GITHUB_TOKEN` server secret, host allowlist, zod validation). Missing URL → labeled demo data; failing URL → error state, never silent mock.
+- Access is invite-only: public signup disabled; admins create users via `src/lib/admin.functions.ts`; roles in `user_roles` (admin/viewer); all app pages live under `src/routes/_authenticated/`.
+- Global period/origin filters live in `FiltersProvider` (`src/data/useDashboard.tsx`).
 - App version constant is `APP_VERSION` in `src/components/dash/AppShell.tsx`; bump it on meaningful changes.

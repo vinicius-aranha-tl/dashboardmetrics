@@ -10,90 +10,108 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiRouteImport } from './routes/api'
-import { Route as CoberturaRouteImport } from './routes/cobertura'
-import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
-import { Route as FalhasRouteImport } from './routes/falhas'
-import { Route as UiRouteImport } from './routes/ui'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
+import { Route as AuthenticatedVisaoGeralRouteImport } from './routes/_authenticated/visao-geral'
+import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
+import { Route as AuthenticatedProjetosSlugRouteImport } from './routes/_authenticated/projetos.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiRoute = ApiRouteImport.update({
-  id: '/api',
-  path: '/api',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const CoberturaRoute = CoberturaRouteImport.update({
-  id: '/cobertura',
-  path: '/cobertura',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ConfiguracoesRoute = ConfiguracoesRouteImport.update({
-  id: '/configuracoes',
-  path: '/configuracoes',
-  getParentRoute: () => rootRouteImport,
+const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const FalhasRoute = FalhasRouteImport.update({
-  id: '/falhas',
-  path: '/falhas',
-  getParentRoute: () => rootRouteImport,
+const AuthenticatedVisaoGeralRoute = AuthenticatedVisaoGeralRouteImport.update({
+  id: '/visao-geral',
+  path: '/visao-geral',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
-const UiRoute = UiRouteImport.update({
-  id: '/ui',
-  path: '/ui',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const AuthenticatedProjetosIndexRoute =
+  AuthenticatedProjetosIndexRouteImport.update({
+    id: '/projetos/',
+    path: '/projetos/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedProjetosSlugRoute =
+  AuthenticatedProjetosSlugRouteImport.update({
+    id: '/projetos/$slug',
+    path: '/projetos/$slug',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/cobertura': typeof CoberturaRoute
-  '/configuracoes': typeof ConfiguracoesRoute
-  '/falhas': typeof FalhasRoute
-  '/ui': typeof UiRoute
+  '/auth': typeof AuthRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
+  '/projetos/': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/cobertura': typeof CoberturaRoute
-  '/configuracoes': typeof ConfiguracoesRoute
-  '/falhas': typeof FalhasRoute
-  '/ui': typeof UiRoute
+  '/auth': typeof AuthRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
+  '/projetos': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api': typeof ApiRoute
-  '/cobertura': typeof CoberturaRoute
-  '/configuracoes': typeof ConfiguracoesRoute
-  '/falhas': typeof FalhasRoute
-  '/ui': typeof UiRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
+  '/_authenticated/visao-geral': typeof AuthenticatedVisaoGeralRoute
+  '/_authenticated/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
+  '/_authenticated/projetos/': typeof AuthenticatedProjetosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api' | '/cobertura' | '/configuracoes' | '/falhas' | '/ui'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/usuarios'
+    | '/visao-geral'
+    | '/projetos/$slug'
+    | '/projetos/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api' | '/cobertura' | '/configuracoes' | '/falhas' | '/ui'
+  to:
+    | '/'
+    | '/auth'
+    | '/usuarios'
+    | '/visao-geral'
+    | '/projetos/$slug'
+    | '/projetos'
   id:
     | '__root__'
     | '/'
-    | '/api'
-    | '/cobertura'
-    | '/configuracoes'
-    | '/falhas'
-    | '/ui'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/usuarios'
+    | '/_authenticated/visao-geral'
+    | '/_authenticated/projetos/$slug'
+    | '/_authenticated/projetos/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiRoute: typeof ApiRoute
-  CoberturaRoute: typeof CoberturaRoute
-  ConfiguracoesRoute: typeof ConfiguracoesRoute
-  FalhasRoute: typeof FalhasRoute
-  UiRoute: typeof UiRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -105,51 +123,72 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api': {
-      id: '/api'
-      path: '/api'
-      fullPath: '/api'
-      preLoaderRoute: typeof ApiRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/cobertura': {
-      id: '/cobertura'
-      path: '/cobertura'
-      fullPath: '/cobertura'
-      preLoaderRoute: typeof CoberturaRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/configuracoes': {
-      id: '/configuracoes'
-      path: '/configuracoes'
-      fullPath: '/configuracoes'
-      preLoaderRoute: typeof ConfiguracoesRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/usuarios': {
+      id: '/_authenticated/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/falhas': {
-      id: '/falhas'
-      path: '/falhas'
-      fullPath: '/falhas'
-      preLoaderRoute: typeof FalhasRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/visao-geral': {
+      id: '/_authenticated/visao-geral'
+      path: '/visao-geral'
+      fullPath: '/visao-geral'
+      preLoaderRoute: typeof AuthenticatedVisaoGeralRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/ui': {
-      id: '/ui'
-      path: '/ui'
-      fullPath: '/ui'
-      preLoaderRoute: typeof UiRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_authenticated/projetos/': {
+      id: '/_authenticated/projetos/'
+      path: '/projetos'
+      fullPath: '/projetos/'
+      preLoaderRoute: typeof AuthenticatedProjetosIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/projetos/$slug': {
+      id: '/_authenticated/projetos/$slug'
+      path: '/projetos/$slug'
+      fullPath: '/projetos/$slug'
+      preLoaderRoute: typeof AuthenticatedProjetosSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
+  AuthenticatedVisaoGeralRoute: typeof AuthenticatedVisaoGeralRoute
+  AuthenticatedProjetosSlugRoute: typeof AuthenticatedProjetosSlugRoute
+  AuthenticatedProjetosIndexRoute: typeof AuthenticatedProjetosIndexRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
+  AuthenticatedVisaoGeralRoute: AuthenticatedVisaoGeralRoute,
+  AuthenticatedProjetosSlugRoute: AuthenticatedProjetosSlugRoute,
+  AuthenticatedProjetosIndexRoute: AuthenticatedProjetosIndexRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiRoute: ApiRoute,
-  CoberturaRoute: CoberturaRoute,
-  ConfiguracoesRoute: ConfiguracoesRoute,
-  FalhasRoute: FalhasRoute,
-  UiRoute: UiRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

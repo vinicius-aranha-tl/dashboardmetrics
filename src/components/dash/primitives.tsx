@@ -49,7 +49,7 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{children}</div>;
 }
 
-export function PageTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+export function PageTitle({ title, subtitle }: { title: string; subtitle?: string | undefined }) {
   return (
     <div className="mb-6">
       <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
