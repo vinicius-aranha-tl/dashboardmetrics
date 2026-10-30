@@ -89,9 +89,14 @@ export function normalizeExecutions(raw: unknown, product: Product): Execution[]
       if (typeof title !== "string") throw new FormatError(`[${i}].results[${j}].title ausente`);
       if (!status) throw new FormatError(`[${i}].results[${j}].status desconhecido`);
       const str = (k: string[]) => { const v = pick(t, k); return v == null ? undefined : String(v); };
-      return { title, status, error: str(["error", "message"]), detail: str(["detail", "details", "stack"]), cause: str(["cause", "reason", "category"]) };
+      const r: TestResult = { title, status };
+      const error = str(["error", "message"]), detail = str(["detail", "details", "stack"]), cause = str(["cause", "reason", "category"]);
+      if (error) r.error = error;
+      if (detail) r.detail = detail;
+      if (cause) r.cause = cause;
+      return r;
     });
-    return { id, product, triggerId, runAttempt: Number.isFinite(attempt) && attempt >= 1 ? attempt : 1, trigger: toTrigger(pick(item, ["trigger", "event", "origin"])), date, results };
+    return { id, product, triggerId, runAttempt: Number.isFinite(attempt) && attempt >= 1 ? attempt : 1, trigger: toTrigger(pick(item, ["trigger", "event", "origin"])), date, results, dataSource: String(pick(item, ["dataSource", "data_source"]) ?? product.toUpperCase()) };
   });
 }
 
