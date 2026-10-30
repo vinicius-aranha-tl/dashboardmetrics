@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { mockEvolution, mockExecutions } from "@/data/mock";
 import type { EvolutionPoint, Execution, Product } from "@/lib/metrics";
-import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, normalizeEvolution, normalizeExecutions, SQUAREDUP_FILES } from "@/lib/normalize";
+import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, SQUAREDUP_FILES, STABILITY_FILE, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
 
 export type SourceKind = "executions" | "evolution";
 export interface SourceStatus {
@@ -46,11 +46,11 @@ export function contentsUrl(owner: string, repo: string, branch: string, file: s
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/squaredup/${file}?ref=${encodeURIComponent(branch)}`;
 }
 
-async function readSource<T>(url: string | null, normalize: (raw: unknown) => T[], force: boolean) {
+async function readSource<T>(url: string | null, normalize: (raw: unknown) => T, force: boolean, count: (d: T) => number = (d) => (d as unknown[]).length) {
   if (!url) return { status: { mode: "demo", url: null } as SourceStatus, data: null };
   try {
     const data = normalize(await fetchGithub(url, force));
-    return { status: { mode: "github", url, records: data.length } as SourceStatus, data };
+    return { status: { mode: "github", url, records: count(data) } as SourceStatus, data };
   } catch (e) {
     const msg = e instanceof FormatError ? `Formato não reconhecido: ${e.message}` : (e as Error).message;
     return { status: { mode: "error", url, message: msg } as SourceStatus, data: null };
@@ -62,6 +62,12 @@ export interface ProjectData {
   sources: Record<Product, Record<SourceKind, SourceStatus>>;
   executions: Execution[];
   evolution: Record<Product, EvolutionPoint[]>;
+  /** Specialized files; null data = not available (demo, missing or error) → widgets fall back to history.json. */
+  special: Record<Product, {
+    stability: { status: SourceStatus; file: string; data: StabilityRow[] | null };
+    reasons: { status: SourceStatus; file: string; data: { failures: SpecialFailureRow[]; reasons: ReasonRow[] } | null };
+    lifecycle: { status: SourceStatus; file: string; data: SpecialFailureRow[] | null };
+  }>;
   fetchedAt: string;
 }
 
@@ -88,6 +94,7 @@ export const loadDashboardData = createServerFn({ method: "POST" })
       const sources = {} as ProjectData["sources"];
       const executions: Execution[] = [];
       const evolution = {} as ProjectData["evolution"];
+      const special = {} as ProjectData["special"];
       for (const product of ["api", "ui"] as const) {
         const r = repo[product];
         const evoFile = EVOLUTION_FILE[product];
@@ -103,6 +110,18 @@ export const loadDashboardData = createServerFn({ method: "POST" })
           : (ex.data ?? []).map((e) => ({ ...e, product, triggerId: `${p.id}-${e.triggerId}`, dataSource: `${p.name} · ${product.toUpperCase()}` }));
         executions.push(...exData);
         evolution[product] = ev.status.mode === "demo" ? mockEvolution(p, product) : (ev.data ?? []);
+        const ds = `${p.name} · ${product.toUpperCase()}`;
+        const u = (f: string) => (r ? contentsUrl(r.owner, r.name, r.branch, f) : null);
+        const [st, rs, lc] = await Promise.all([
+          readSource(u(STABILITY_FILE), (raw) => normalizeStability(raw, ds), force),
+          readSource(u(REASONS_FILE), (raw) => normalizeReasons(raw, ds), force, (d) => d.failures.length),
+          readSource(u(LIFECYCLE_FILE), (raw) => normalizeLifecycle(raw, ds), force),
+        ]);
+        special[product] = {
+          stability: { ...st, file: STABILITY_FILE },
+          reasons: { ...rs, file: REASONS_FILE },
+          lifecycle: { ...lc, file: LIFECYCLE_FILE },
+        };
       }
       const errors = (["api", "ui"] as const).flatMap((pr) => (["executions", "evolution"] as const).filter((k) => sources[pr][k].mode === "error").map((k) => `${pr.toUpperCase()} ${k}: ${sources[pr][k].message}`));
       const anyReal = (["api", "ui"] as const).some((pr) => sources[pr].executions.mode !== "demo" || sources[pr].evolution.mode !== "demo");
@@ -110,7 +129,7 @@ export const loadDashboardData = createServerFn({ method: "POST" })
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         await supabaseAdmin.from("projects").update({ last_synced_at: new Date().toISOString(), last_sync_error: errors.join(" | ") || null }).eq("id", p.id);
       }
-      out.push({ project: { id: p.id, name: p.name, slug: p.slug }, sources, executions, evolution, fetchedAt: new Date().toISOString() });
+      out.push({ project: { id: p.id, name: p.name, slug: p.slug }, sources, executions, evolution, special, fetchedAt: new Date().toISOString() });
     }
     return out;
   });
