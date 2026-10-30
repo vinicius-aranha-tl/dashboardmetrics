@@ -26,11 +26,17 @@ export function useFilters() {
   return c;
 }
 
+/** "Atualizar dados" bypasses the 5-min server cache on the next loads (window of a few seconds). */
+let forceUntil = 0;
+export function requestForcedRefresh() {
+  forceUntil = Date.now() + 5000;
+}
+
 /** Data for one project (slug) or all projects (null), already deduped and filtered for one product. */
 export function useDashboardData(slug: string | null, product: Product) {
   const { filters } = useFilters();
   const load = useServerFn(loadDashboardData);
-  const q = useQuery({ queryKey: ["dataset", slug], queryFn: () => load({ data: { slug } }), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["dataset", slug], queryFn: () => load({ data: { slug, force: Date.now() < forceUntil } }), staleTime: 5 * 60_000 });
   const d = useMemo(() => {
     if (!q.data) return null;
     const now = new Date();

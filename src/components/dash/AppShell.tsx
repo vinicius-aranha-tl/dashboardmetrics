@@ -6,11 +6,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ORIGIN_LABEL, PERIOD_LABEL, useFilters, type PeriodKey } from "@/data/useDashboard";
+import { ORIGIN_LABEL, PERIOD_LABEL, requestForcedRefresh, useFilters, type PeriodKey } from "@/data/useDashboard";
 import type { Trigger } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.5.0";
 
 const NAV = [
   { to: "/visao-geral", label: "Visão geral", icon: LayoutDashboard, admin: false },
@@ -22,6 +22,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { filters, setFilters } = useFilters();
   const qc = useQueryClient();
   const fetching = useIsFetching({ queryKey: ["dataset"] }) > 0;
+  const lastUpdate = Math.max(0, ...qc.getQueryCache().findAll({ queryKey: ["dataset"] }).map((q) => q.state.dataUpdatedAt));
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   async function signOut() {
@@ -84,7 +85,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </button>
             ))}
           </div>
-          <Button size="sm" onClick={() => qc.invalidateQueries({ queryKey: ["dataset"] })} disabled={fetching}>
+          {lastUpdate > 0 && <span className="text-xs text-muted-foreground">Última atualização: {new Date(lastUpdate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>}
+          <Button size="sm" onClick={() => { requestForcedRefresh(); qc.invalidateQueries({ queryKey: ["dataset"] }); }} disabled={fetching}>
             <RefreshCw className={cn("h-4 w-4", fetching && "animate-spin")} /> Atualizar dados
           </Button>
         </header>
