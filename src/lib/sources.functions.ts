@@ -19,7 +19,7 @@ const cache = new Map<string, { at: number; value: unknown }>();
 const nameRe = /^[A-Za-z0-9_.-]{1,100}$/;
 
 /** Fetches JSON from GitHub on the server with GITHUB_TOKEN (never sent to the browser). Cached 5 min. */
-async function fetchGithub(url: string, force = false): Promise<unknown> {
+async function fetchGithub(url: string, force = false, raw = true): Promise<unknown> {
   const hit = cache.get(url);
   if (!force && hit && Date.now() - hit.at < TTL) return hit.value;
   const u = new URL(url);
@@ -27,7 +27,8 @@ async function fetchGithub(url: string, force = false): Promise<unknown> {
   const token = process.env["GITHUB_TOKEN"];
   const res = await fetch(u, {
     headers: {
-      Accept: "application/vnd.github+json",
+      // raw media type returns file bodies directly (works above the 1 MB base64 limit)
+      Accept: raw && u.hostname === "api.github.com" ? "application/vnd.github.raw+json" : "application/vnd.github+json",
       "User-Agent": "dashboard-metrics-for-qa",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
@@ -127,7 +128,7 @@ export const testRepo = createServerFn({ method: "POST" })
     const dirUrl = `https://api.github.com/repos/${encodeURIComponent(data.owner)}/${encodeURIComponent(data.repo)}/contents/squaredup?ref=${encodeURIComponent(data.branch)}`;
     let names: string[];
     try {
-      const dir = await fetchGithub(dirUrl, true);
+      const dir = await fetchGithub(dirUrl, true, false);
       if (!Array.isArray(dir)) throw new Error("squaredup/ não é uma pasta");
       names = dir.filter((f) => f && f.type === "file" && String(f.name).endsWith(".json")).map((f) => String(f.name));
     } catch (e) {
