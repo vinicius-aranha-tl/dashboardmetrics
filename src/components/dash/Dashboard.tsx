@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, FileDown, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { useDashboardData } from "@/data/useDashboard";
+import { ORIGIN_LABEL, PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
+import { exportDashboardPdf } from "@/lib/pdfExport";
+import { CHART_KINDS, ChartIcon, type ChartKind } from "./chartKinds";
 import type { Product } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import { EmptyState, Panel } from "./primitives";
@@ -32,17 +34,47 @@ function defaultsFor(isOverview: boolean): Omit<Widget, "id">[] {
   return list.map((w, i) => ({ ...w, title: WIDGET_CATALOG[w.widget_type].defaultTitle, position: i }));
 }
 
-export function Dashboard({ projectId, slug }: { projectId: string | null; slug: string | null }) {
+export function Dashboard({ projectId, slug, name }: { projectId: string | null; slug: string | null; name?: string }) {
   const [product, setProduct] = useState<Product>("api");
+  const [exporting, setExporting] = useState(false);
+  const { filters } = useFilters();
+  const refs = { api: useRef<HTMLDivElement>(null), ui: useRef<HTMLDivElement>(null) };
+
+  async function exportPdf() {
+    setExporting(true);
+    try {
+      await new Promise((r) => setTimeout(r, 1200)); // let hidden tab charts lay out
+      const title = name ?? "Visão geral — todos os projetos";
+      await exportDashboardPdf({
+        title,
+        subtitle: `Período: ${PERIOD_LABEL[filters.period]} · Origens: ${filters.origins.map((o) => ORIGIN_LABEL[o]).join(", ")}`,
+        sections: (["api", "ui"] as const).map((p) => ({ label: `Automação de ${p.toUpperCase()}`, root: refs[p].current! })),
+        filename: `${(slug ?? "visao-geral")}-${new Date().toISOString().slice(0, 10)}.pdf`,
+      });
+      toast.success("PDF gerado");
+    } catch (e) {
+      toast.error(`Não foi possível gerar o PDF: ${(e as Error).message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div>
-      <Tabs value={product} onValueChange={(v) => setProduct(v as Product)} className="mb-5">
-        <TabsList>
-          <TabsTrigger value="api">API</TabsTrigger>
-          <TabsTrigger value="ui">UI</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <ProductDashboard key={product} projectId={projectId} slug={slug} product={product} />
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Tabs value={product} onValueChange={(v) => setProduct(v as Product)}>
+          <TabsList>
+            <TabsTrigger value="api">API</TabsTrigger>
+            <TabsTrigger value="ui">UI</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button variant="secondary" size="sm" disabled={exporting} onClick={exportPdf}><FileDown className="h-4 w-4" /> {exporting ? "Gerando PDF…" : "Gerar PDF (API + UI)"}</Button>
+      </div>
+      {(["api", "ui"] as const).map((p) => (
+        <div key={p} ref={refs[p]} className={cn(p !== product && (exporting ? "fixed top-0 -left-[10000px] w-[1200px]" : "hidden"))}>
+          <ProductDashboard projectId={projectId} slug={slug} product={p} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -142,9 +174,10 @@ function ProductDashboard({ projectId, slug, product }: { projectId: string | nu
               title={`${w.title} — ${product.toUpperCase()}`}
               info={WIDGET_CATALOG[w.widget_type as WidgetType]?.info}
               className={cn(w.width === "full" && "lg:col-span-2")}
+              pdfInfo={`${WIDGET_CATALOG[w.widget_type as WidgetType]?.description ?? ""} ${WIDGET_CATALOG[w.widget_type as WidgetType]?.info ?? ""}`.trim()}
               action={
                 isAdmin && (
-                  <div className="flex gap-0.5">
+                  <div className="flex gap-0.5" data-pdf-ignore>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Mover para cima" disabled={i === 0} onClick={() => move(w, -1)}><ArrowUp className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Mover para baixo" disabled={i === widgets.length - 1} onClick={() => move(w, 1)}><ArrowDown className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Editar gráfico" onClick={() => setEditing(w)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -170,16 +203,30 @@ function WidgetDialog({ initial, isOverview, onClose, onSave, saving }: { initia
   const types = (Object.keys(WIDGET_CATALOG) as WidgetType[]).filter((t) => isOverview || t !== "project_ranking");
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader><DialogTitle>{initial ? "Editar gráfico" : "Adicionar gráfico"}</DialogTitle></DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label>Tipo</Label>
-            <Select value={type} onValueChange={(v) => { const t = v as WidgetType; setType(t); if (!initial) { setTitle(WIDGET_CATALOG[t].defaultTitle); setWidth(WIDGET_CATALOG[t].defaultWidth); } }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{types.map((t) => <SelectItem key={t} value={t}>{WIDGET_CATALOG[t].label}</SelectItem>)}</SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">{WIDGET_CATALOG[type].description}</p>
+            <Label>Tipo de gráfico</Label>
+            <div className="grid max-h-[50vh] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
+              {types.map((t) => {
+                const c = WIDGET_CATALOG[t];
+                return (
+                  <button key={t} type="button" onClick={() => { setType(t); if (!initial) { setTitle(c.defaultTitle); setWidth(c.defaultWidth); } }}
+                    className={cn("flex flex-col items-start gap-1 rounded-lg border p-2 text-left transition-colors", type === t ? "border-primary bg-primary/10" : "border-border hover:bg-muted")}>
+                    <ChartIcon kind={c.kind} className="h-8 w-10" />
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{CHART_KINDS[c.kind].label}</span>
+                    <span className="text-xs font-medium leading-tight">{c.label}</span>
+                  </button>
+                );
+              })}
+              <div className="flex flex-col items-start gap-1 rounded-lg border border-dashed border-border p-2 opacity-50" title={CHART_KINDS.map.when}>
+                <ChartIcon kind="map" className="h-8 w-10" />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Mapa</span>
+                <span className="text-xs leading-tight">Não se aplica</span>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground"><b>{CHART_KINDS[WIDGET_CATALOG[type].kind].label}:</b> {CHART_KINDS[WIDGET_CATALOG[type].kind].when} {WIDGET_CATALOG[type].description}</p>
           </div>
           <div className="grid gap-2"><Label htmlFor="wt">Título</Label><Input id="wt" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} /></div>
           <div className="grid gap-2">
