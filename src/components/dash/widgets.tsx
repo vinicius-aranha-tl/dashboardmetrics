@@ -1,34 +1,51 @@
 import { DataTable } from "./DataTable";
-import { CauseDonut, DailyChart, EvolutionChart, Gauge } from "./charts";
+import { CauseDonut, CoverageWaterfall, DailyChart, DailyColumns, EvolutionChart, FailureHeatmap, FailureTreemap, Gauge, OriginRadar, QualityFunnel, RankingBars, RateBands, StabilityScatter } from "./charts";
+import type { ChartKind } from "./chartKinds";
+import { ORIGIN_LABEL } from "@/data/useDashboard";
 import { EmptyState, StatCard, fmtDate, fmtInt, fmtPct } from "./primitives";
 import type { DashData } from "@/data/useDashboard";
-import { causeDistribution, computeProjection, dailyResults, failureRows, flakyTable, summarize, testCount, type Product, type Projection } from "@/lib/metrics";
+import { causeDistribution, computeProjection, coverageWaterfall, dailyRate, dailyResults, failureHeatmap, qualityFunnel, rateByOrigin, testStability, topFailingTests, failureRows, flakyTable, summarize, testCount, type Product, type Projection } from "@/lib/metrics";
 
 export const RATE_INFO = "Taxa = (aprovados + flaky) ÷ total de resultados. Flaky terminou aprovado após retry interno e não reduz o sucesso. Falha = teste que falhou definitivamente. Reruns da mesma Action são ignorados; só conta a primeira tentativa de cada gatilho. Verde ≥ 90%, amarelo 80–89,99%, vermelho < 80%.";
 export const PROJECTION_INFO = "Velocidade = inclinação (regressão linear) das últimas até 8 semanas. A projeção só é desenhada quando a automação cresce mais rápido que o produto e há pelo menos 3 semanas de histórico. Semanas restantes = diferença atual ÷ (velocidade automação − velocidade produto). Condições duplicadas contam uma vez; cenários extras fora do contrato não contam.";
 
-export type WidgetType = "success_gauge" | "summary_cards" | "daily_results" | "evolution" | "flaky_table" | "failure_details" | "failure_history" | "cause_donut" | "project_ranking";
+export type WidgetType = "success_gauge" | "summary_cards" | "daily_results" | "daily_columns" | "rate_trend" | "evolution" | "top_failures" | "stability_scatter" | "origin_radar" | "quality_funnel" | "failure_treemap" | "failure_heatmap" | "coverage_waterfall" | "flaky_table" | "failure_details" | "failure_history" | "cause_donut" | "project_ranking";
 
-export const WIDGET_CATALOG: Record<WidgetType, { label: string; description: string; defaultTitle: string; defaultWidth: "half" | "full"; info?: string }> = {
-  success_gauge: { label: "Gauge de taxa de sucesso", description: "Velocímetro com faixas verde/amarelo/vermelho.", defaultTitle: "Taxa de sucesso", defaultWidth: "half", info: RATE_INFO },
-  summary_cards: { label: "Cards de números", description: "Total de testes, execuções, falhas e flaky.", defaultTitle: "Resumo", defaultWidth: "half" },
-  daily_results: { label: "Resultados diários", description: "Área empilhada de aprovados, flaky e falhas por dia.", defaultTitle: "Resultados diários", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
-  evolution: { label: "Produto vs automação", description: "Linhas de condições + projeção de paridade.", defaultTitle: "Evolução do produto versus automação", defaultWidth: "full", info: PROJECTION_INFO },
-  flaky_table: { label: "Tabela de flaky tests", description: "Testes que falharam internamente e passaram no retry.", defaultTitle: "Flaky tests", defaultWidth: "full", info: "Executions = execuções válidas em que o teste rodou. Failure Executions = execuções em que falhou internamente e terminou aprovado." },
-  failure_details: { label: "Detalhamento das falhas", description: "Falhas definitivas do período agrupadas por erro.", defaultTitle: "Detalhamento das falhas", defaultWidth: "full", info: "Falhas definitivas agrupadas por teste e erro. Cada execução válida conta no máximo uma ocorrência." },
-  cause_donut: { label: "Donut de causas", description: "Distribuição das falhas por causa.", defaultTitle: "Falhas por causa", defaultWidth: "half" },
-  failure_history: { label: "Histórico de falhas", description: "Ciclo de vida das falhas, sem limite de período.", defaultTitle: "Histórico de falhas — ciclo de vida", defaultWidth: "full", info: "Sem limite de período. First Seen = primeira vez que o teste apareceu; First Occurrence = primeira falha definitiva." },
-  project_ranking: { label: "Comparativo por projeto", description: "Taxa de sucesso, falhas e cobertura de cada projeto.", defaultTitle: "Comparativo por projeto", defaultWidth: "full" },
+export const WIDGET_CATALOG: Record<WidgetType, { kind: ChartKind; label: string; description: string; defaultTitle: string; defaultWidth: "half" | "full"; info?: string }> = {
+  success_gauge: { kind: "gauge", label: "Taxa de sucesso", description: "Velocímetro com faixas verde/amarelo/vermelho em relação à meta.", defaultTitle: "Taxa de sucesso", defaultWidth: "half", info: RATE_INFO },
+  summary_cards: { kind: "card", label: "Números principais", description: "Total de testes, execuções, falhas e flaky.", defaultTitle: "Resumo", defaultWidth: "half" },
+  evolution: { kind: "line", label: "Produto vs automação", description: "Tendência das condições do produto e da automação + projeção de paridade.", defaultTitle: "Evolução do produto versus automação", defaultWidth: "full", info: PROJECTION_INFO },
+  rate_trend: { kind: "bands", label: "Taxa de sucesso por dia", description: "Linha da taxa diária sobre as faixas da meta (≥ 90% verde).", defaultTitle: "Taxa de sucesso diária vs meta", defaultWidth: "full", info: RATE_INFO },
+  daily_columns: { kind: "column", label: "Resultados diários (colunas)", description: "Aprovados, flaky e falhas por dia em colunas empilhadas.", defaultTitle: "Resultados diários", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
+  daily_results: { kind: "line", label: "Resultados diários (área)", description: "Área empilhada de aprovados, flaky e falhas por dia.", defaultTitle: "Resultados diários (área)", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
+  top_failures: { kind: "bar", label: "Testes que mais falham", description: "Ranking dos 10 testes com mais falhas definitivas.", defaultTitle: "Testes que mais falham", defaultWidth: "half", info: "Soma das ocorrências de falha definitiva por teste no período." },
+  cause_donut: { kind: "pie", label: "Falhas por causa", description: "Distribuição percentual das falhas por causa.", defaultTitle: "Falhas por causa", defaultWidth: "half" },
+  quality_funnel: { kind: "funnel", label: "Funil de qualidade", description: "Condições do produto → automatizadas → testes executados → sem falha.", defaultTitle: "Funil de qualidade", defaultWidth: "half", info: "Condições = última semana do período. Testes executados e sem falha definitiva = testes distintos no período." },
+  coverage_waterfall: { kind: "waterfall", label: "Ganho semanal de automação", description: "Quanto a automação cresceu ou caiu a cada semana.", defaultTitle: "Variação semanal das condições automatizadas", defaultWidth: "half", info: "Primeira barra = total inicial do período. Verde = ganho na semana, vermelho = perda." },
+  failure_heatmap: { kind: "heatmap", label: "Mapa de calor de falhas", description: "Falhas definitivas por dia da semana ao longo das semanas.", defaultTitle: "Mapa de calor de falhas", defaultWidth: "full" },
+  stability_scatter: { kind: "scatter", label: "Estabilidade dos testes", description: "Cada ponto é um teste: execuções × vezes que não passou de primeira.", defaultTitle: "Estabilidade dos testes", defaultWidth: "half" },
+  origin_radar: { kind: "radar", label: "Taxa por origem", description: "Taxa de sucesso por origem: agendada, pós-merge e manual.", defaultTitle: "Taxa de sucesso por origem", defaultWidth: "half", info: RATE_INFO },
+  failure_treemap: { kind: "treemap", label: "Falhas por causa e teste", description: "Hierarquia: causa → testes, proporcional às ocorrências.", defaultTitle: "Falhas por causa e teste", defaultWidth: "full" },
+  flaky_table: { kind: "matrix", label: "Tabela de flaky tests", description: "Testes que falharam internamente e passaram no retry.", defaultTitle: "Flaky tests", defaultWidth: "full", info: "Executions = execuções válidas em que o teste rodou. Failure Executions = execuções em que falhou internamente e terminou aprovado." },
+  failure_details: { kind: "matrix", label: "Detalhamento das falhas", description: "Falhas definitivas do período agrupadas por erro.", defaultTitle: "Detalhamento das falhas", defaultWidth: "full", info: "Falhas definitivas agrupadas por teste e erro. Cada execução válida conta no máximo uma ocorrência." },
+  failure_history: { kind: "matrix", label: "Histórico de falhas", description: "Ciclo de vida das falhas, sem limite de período.", defaultTitle: "Histórico de falhas — ciclo de vida", defaultWidth: "full", info: "Sem limite de período. First Seen = primeira vez que o teste apareceu; First Occurrence = primeira falha definitiva." },
+  project_ranking: { kind: "matrix", label: "Comparativo por projeto", description: "Taxa de sucesso, falhas e cobertura de cada projeto.", defaultTitle: "Comparativo por projeto", defaultWidth: "full" },
 };
 
+/** Suggested starting dashboard, following the chart-type legend. */
 export const DEFAULT_WIDGETS: { widget_type: WidgetType; width: "half" | "full" }[] = [
   { widget_type: "success_gauge", width: "half" },
   { widget_type: "summary_cards", width: "half" },
   { widget_type: "evolution", width: "full" },
-  { widget_type: "daily_results", width: "full" },
-  { widget_type: "flaky_table", width: "full" },
-  { widget_type: "failure_details", width: "half" },
+  { widget_type: "rate_trend", width: "full" },
+  { widget_type: "daily_columns", width: "full" },
+  { widget_type: "top_failures", width: "half" },
   { widget_type: "cause_donut", width: "half" },
+  { widget_type: "quality_funnel", width: "half" },
+  { widget_type: "coverage_waterfall", width: "half" },
+  { widget_type: "failure_heatmap", width: "full" },
+  { widget_type: "flaky_table", width: "full" },
+  { widget_type: "failure_details", width: "full" },
   { widget_type: "failure_history", width: "full" },
 ];
 
@@ -93,6 +110,27 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
           )}
         </>
       );
+    }
+    case "daily_columns":
+      return <DailyColumns data={dailyResults(d.inPeriod)} />;
+    case "rate_trend":
+      return <RateBands data={dailyRate(d.inPeriod)} />;
+    case "top_failures":
+      return <RankingBars data={topFailingTests(failureRows(d.inPeriod))} empty="Nenhuma falha definitiva no período." />;
+    case "stability_scatter":
+      return <StabilityScatter data={testStability(d.inPeriod)} />;
+    case "origin_radar":
+      return <OriginRadar data={rateByOrigin(d.inPeriod).map((r) => ({ label: ORIGIN_LABEL[r.origin], rate: r.rate }))} />;
+    case "quality_funnel":
+      return <QualityFunnel data={qualityFunnel(filterWeeks(d.evolution, d.periodDays), d.inPeriod)} />;
+    case "coverage_waterfall":
+      return <CoverageWaterfall data={coverageWaterfall(filterWeeks(d.evolution, d.periodDays))} />;
+    case "failure_heatmap":
+      return <FailureHeatmap data={failureHeatmap(d.inPeriod)} />;
+    case "failure_treemap": {
+      const m = new Map<string, Map<string, number>>();
+      failureRows(d.inPeriod).forEach((r) => { const c = m.get(r.cause) ?? new Map(); c.set(r.title, (c.get(r.title) ?? 0) + r.occurrences); m.set(r.cause, c); });
+      return <FailureTreemap data={[...m.entries()].map(([name, c]) => ({ name, children: [...c.entries()].map(([n, size]) => ({ name: n, size })) }))} />;
     }
     case "flaky_table":
       return (
