@@ -57,42 +57,66 @@ export type Database = {
       }
       projects: {
         Row: {
+          api_branch: string
           api_evolution_url: string | null
           api_executions_url: string | null
+          api_repo_name: string | null
+          api_repo_owner: string | null
           created_at: string
           created_by: string | null
           description: string
           id: string
+          last_sync_error: string | null
+          last_synced_at: string | null
           name: string
           slug: string
+          ui_branch: string
           ui_evolution_url: string | null
           ui_executions_url: string | null
+          ui_repo_name: string | null
+          ui_repo_owner: string | null
           updated_at: string
         }
         Insert: {
+          api_branch?: string
           api_evolution_url?: string | null
           api_executions_url?: string | null
+          api_repo_name?: string | null
+          api_repo_owner?: string | null
           created_at?: string
           created_by?: string | null
           description?: string
           id?: string
+          last_sync_error?: string | null
+          last_synced_at?: string | null
           name: string
           slug: string
+          ui_branch?: string
           ui_evolution_url?: string | null
           ui_executions_url?: string | null
+          ui_repo_name?: string | null
+          ui_repo_owner?: string | null
           updated_at?: string
         }
         Update: {
+          api_branch?: string
           api_evolution_url?: string | null
           api_executions_url?: string | null
+          api_repo_name?: string | null
+          api_repo_owner?: string | null
           created_at?: string
           created_by?: string | null
           description?: string
           id?: string
+          last_sync_error?: string | null
+          last_synced_at?: string | null
           name?: string
           slug?: string
+          ui_branch?: string
           ui_evolution_url?: string | null
           ui_executions_url?: string | null
+          ui_repo_name?: string | null
+          ui_repo_owner?: string | null
           updated_at?: string
         }
         Relationships: []
