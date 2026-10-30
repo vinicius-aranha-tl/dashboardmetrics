@@ -297,3 +297,89 @@ export function aggregateEvolution(series: EvolutionPoint[][]): EvolutionPoint[]
     }
   return [...m.values()].sort((a, b) => a.week.localeCompare(b.week));
 }
+
+// ---------- Extra chart datasets (catalog based on chart-type legend) ----------
+
+/** Tests ranked by definitive failure occurrences (sum across errors). */
+export function topFailingTests(rows: FailureRow[], n = 10): { title: string; value: number }[] {
+  const m = new Map<string, number>();
+  rows.forEach((r) => m.set(r.title, (m.get(r.title) ?? 0) + r.occurrences));
+  return [...m.entries()].map(([title, value]) => ({ title, value })).sort((a, b) => b.value - a.value).slice(0, n);
+}
+
+/** Success rate per day (same rule as summarize). */
+export function dailyRate(execs: Execution[]): { date: string; rate: number }[] {
+  return dailyResults(execs).map((d) => {
+    const total = d.passed + d.unstable + d.failed;
+    return { date: d.date, rate: total ? Math.round(((d.passed + d.unstable) / total) * 10000) / 100 : 0 };
+  });
+}
+
+/** Success rate per origin (trigger); origins without data are omitted. */
+export function rateByOrigin(execs: Execution[]): { origin: Trigger; rate: number; total: number }[] {
+  return (["scheduled", "post-merge", "manual"] as Trigger[])
+    .map((origin) => {
+      const s = summarize(execs.filter((e) => e.trigger === origin));
+      return { origin, rate: s.rate == null ? -1 : Math.round(s.rate * 100) / 100, total: s.total };
+    })
+    .filter((r) => r.rate >= 0);
+}
+
+/** Per test: how many valid executions ran it vs how many ended flaky/failed. */
+export function testStability(execs: Execution[]): { title: string; executions: number; problems: number }[] {
+  const m = new Map<string, { title: string; executions: number; problems: number }>();
+  for (const e of execs)
+    for (const r of e.results) {
+      const row = m.get(r.title) ?? { title: r.title, executions: 0, problems: 0 };
+      row.executions++;
+      if (r.status !== "passed") row.problems++;
+      m.set(r.title, row);
+    }
+  return [...m.values()];
+}
+
+/** Weekday (0=Sun) x ISO week grid of definitive failures. */
+export function failureHeatmap(execs: Execution[]): { week: string; day: number; failed: number; total: number }[] {
+  const m = new Map<string, { week: string; day: number; failed: number; total: number }>();
+  for (const e of execs) {
+    const d = new Date(e.date + "T00:00:00Z");
+    const day = d.getUTCDay();
+    const monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() - ((day + 6) % 7));
+    const week = monday.toISOString().slice(0, 10);
+    const k = `${week}|${day}`;
+    const c = m.get(k) ?? { week, day, failed: 0, total: 0 };
+    for (const r of e.results) {
+      c.total++;
+      if (r.status === "failed") c.failed++;
+    }
+    m.set(k, c);
+  }
+  return [...m.values()];
+}
+
+/** Funnel: product conditions → automated → tests executed in period → tests without definitive failure. */
+export function qualityFunnel(evo: EvolutionPoint[], execs: Execution[]): { stage: string; value: number }[] {
+  const last = evo.filter((p) => p.productConditions > 0).at(-1);
+  const titles = new Set<string>();
+  const failed = new Set<string>();
+  execs.forEach((e) => e.results.forEach((r) => { titles.add(r.title); if (r.status === "failed") failed.add(r.title); }));
+  return [
+    { stage: "Condições do produto", value: last?.productConditions ?? 0 },
+    { stage: "Condições automatizadas", value: last?.automatedConditions ?? 0 },
+    { stage: "Testes executados", value: titles.size },
+    { stage: "Testes sem falha definitiva", value: titles.size - failed.size },
+  ];
+}
+
+/** Waterfall of automated conditions: start value + weekly increments. */
+export function coverageWaterfall(evo: EvolutionPoint[]): { label: string; base: number; delta: number; end: number }[] {
+  const pts = evo.filter((p) => p.productConditions > 0);
+  if (!pts.length) return [];
+  const out = [{ label: pts[0]!.week, base: 0, delta: pts[0]!.automatedConditions, end: pts[0]!.automatedConditions }];
+  for (let i = 1; i < pts.length; i++) {
+    const prev = pts[i - 1]!.automatedConditions, cur = pts[i]!.automatedConditions;
+    out.push({ label: pts[i]!.week, base: Math.min(prev, cur), delta: cur - prev, end: cur });
+  }
+  return out;
+}
