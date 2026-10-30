@@ -86,8 +86,10 @@ function readTest(t: unknown, where: string): TestResult {
 
 /** Per-test list when published; otherwise rebuilt from the summary counts (tests.passed/failed/flaky). */
 function readResults(item: Obj, i: number): TestResult[] {
-  const list = pick(item, ["results", "testResults"]);
-  if (Array.isArray(list) && list.length) return list.map((t, j) => readTest(t, `[${i}].testResults[${j}]`));
+  for (const key of ["results", "testResults"]) {
+    const list = item[key];
+    if (Array.isArray(list) && list.length) return list.map((t, j) => readTest(t, `[${i}].${key}[${j}]`));
+  }
   const sum = isObj(item["tests"]) ? (item["tests"] as Obj) : null;
   if (Array.isArray(item["tests"])) return (item["tests"] as unknown[]).map((t, j) => readTest(t, `[${i}].tests[${j}]`));
   if (!sum) throw new FormatError(`[${i}].tests ausente (resumo ou lista de testes)`);
