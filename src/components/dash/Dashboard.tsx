@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { ORIGIN_LABEL, PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
 import { exportDashboardPdf } from "@/lib/pdfExport";
-import { CHART_KINDS, ChartIcon, type ChartKind } from "./chartKinds";
+import { CHART_KINDS, ChartIcon } from "./chartKinds";
 import type { Product } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import { EmptyState, Panel } from "./primitives";
