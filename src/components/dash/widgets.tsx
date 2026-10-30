@@ -160,7 +160,7 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
             { key: "error", label: "Error", className: mono },
             { key: "detail", label: "Detail", className: "text-muted-foreground" },
             { key: "occurrences", label: "Occurrences", numeric: true },
-            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => fmtDate(String(r["lastOccurrence"])) },
+            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => fmtDate(String(r["lastOccurrence"]).slice(0, 10)) },
             { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
           ]} />
         </>
@@ -179,9 +179,9 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
             { key: "detail", label: "Detail", className: "text-muted-foreground" },
             { key: "occurrences", label: "Occurrences", numeric: true },
             { key: "dataSource", label: "Data Source Name", className: "text-muted-foreground" },
-            { key: "firstSeen", label: "First Seen", render: (r) => (r["firstSeen"] ? fmtDate(String(r["firstSeen"])) : "—") },
-            { key: "firstOccurrence", label: "First Occurrence", render: (r) => (r["firstOccurrence"] ? fmtDate(String(r["firstOccurrence"])) : "—") },
-            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => (r["lastOccurrence"] ? fmtDate(String(r["lastOccurrence"])) : "—") },
+            { key: "firstSeen", label: "First Seen", render: (r) => (r["firstSeen"] ? fmtDate(String(r["firstSeen"]).slice(0, 10)) : "—") },
+            { key: "firstOccurrence", label: "First Occurrence", render: (r) => (r["firstOccurrence"] ? fmtDate(String(r["firstOccurrence"]).slice(0, 10)) : "—") },
+            { key: "lastOccurrence", label: "Last Occurrence", render: (r) => (r["lastOccurrence"] ? fmtDate(String(r["lastOccurrence"]).slice(0, 10)) : "—") },
           ]} />
         </>
       );
