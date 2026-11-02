@@ -11,10 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
+import { buildSpecial, useDashboardData } from "@/data/useDashboard";
 import { exportDashboardPdf } from "@/lib/pdfExport";
 import { CHART_KINDS, ChartIcon } from "./chartKinds";
-import type { Product } from "@/lib/metrics";
+import { filterExecutions, type Product } from "@/lib/metrics";
 import { cn } from "@/lib/utils";
 import { EmptyState, Panel } from "./primitives";
 import { SourceBadges } from "./SourceBadges";
@@ -51,7 +51,6 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
   const [exporting, setExporting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const { canEdit } = useAuth();
-  const { filters } = useFilters();
   const apiData = useDashboardData(slug, "api");
   const uiData = useDashboardData(slug, "ui");
   useEffect(() => { setEditMode(false); }, [projectId]);
@@ -63,8 +62,26 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
       const title = name ?? "Visão geral — todos os projetos";
       await exportDashboardPdf({
         title,
-        subtitle: `Período selecionado: ${PERIOD_LABEL[filters.period]}`,
-        sections: [{ product: "api", data: apiData.d }, { product: "ui", data: uiData.d }],
+        subtitle: "Período do relatório: últimos 15 dias",
+        sections: apiData.d.projects.flatMap((project) => (["api", "ui"] as const).map((product) => {
+          const source = product === "api" ? apiData.d! : uiData.d!;
+          const matchingProject = source.projects.find((item) => item.project.id === project.project.id) ?? project;
+          const ids = new Set(matchingProject.executions.map((execution) => execution.triggerId));
+          return {
+            projectName: project.project.name,
+            product,
+            data: {
+              ...source,
+              projects: [matchingProject],
+              valid: source.valid.filter((execution) => ids.has(execution.triggerId)),
+              inPeriod: filterExecutions(source.valid.filter((execution) => ids.has(execution.triggerId)), { product, origins: ["scheduled"], periodDays: 15, now: new Date() }),
+              allHistory: source.allHistory.filter((execution) => ids.has(execution.triggerId)),
+              evolution: matchingProject.evolution[product],
+              special: buildSpecial([matchingProject], new Date()),
+              specialByProduct: buildSpecial([matchingProject], new Date(), product),
+            },
+          };
+        })),
         filename: `${(slug ?? "visao-geral")}-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
       toast.success("PDF gerado");
