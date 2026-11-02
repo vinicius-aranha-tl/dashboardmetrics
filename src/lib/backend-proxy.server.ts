@@ -24,7 +24,12 @@ export async function proxyBackendRequest(request: Request, configuredUrl: strin
       redirect: "manual",
     });
     if (response.status >= 300 && response.status < 400) return Response.json({ message: "O servidor de métricas respondeu com um redirecionamento inesperado." }, { status: 502 });
-    return response;
+    // fetch decodifica o corpo, mas pode manter os cabeçalhos da resposta comprimida.
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete("content-encoding");
+    responseHeaders.delete("content-length");
+    responseHeaders.delete("transfer-encoding");
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: responseHeaders });
   } catch {
     return Response.json({ message: "Não foi possível conectar ao servidor de métricas." }, { status: 503 });
   }

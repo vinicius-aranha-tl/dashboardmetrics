@@ -24,6 +24,14 @@ describe("encaminhamento do backend", () => {
     expect((await proxyBackendRequest(req, undefined, false)).status).toBe(503);
     expect((await proxyBackendRequest(new Request("https://site.example/backend/health/mongodb"), "https://backend.example", false)).status).toBe(404);
   });
+  it("entrega o corpo decodificado sem os cabeçalhos de compressão originais", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"ok":true}', { headers: { "content-encoding": "gzip", "content-length": "99", "set-cookie": "session=abc; Secure; HttpOnly" } })));
+    const response = await proxyBackendRequest(new Request("https://site.example/backend/auth/me"), "https://backend.example", false);
+    expect(response.headers.has("content-encoding")).toBe(false);
+    expect(response.headers.has("content-length")).toBe(false);
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(await response.json()).toEqual({ ok: true });
+  });
   it("não encaminha redirecionamentos inesperados ao navegador", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 307, headers: { location: "https://other.example" } })));
     const result = await proxyBackendRequest(new Request("https://site.example/backend/auth/login", { method: "POST", body: "{}" }), "https://backend.example", false);
