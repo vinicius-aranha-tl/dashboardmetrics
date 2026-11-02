@@ -1,0 +1,11 @@
+.git
+node_modules
+.output
+.tanstack
+.wrangler
+**/bin
+**/obj
+.env*
+**/appsettings.local.json
+**/admin.local.json*
+planejamento

@@ -5,6 +5,9 @@ using DashboardMetrics.Domain.Metrics;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.RateLimiting;
 using MongoDB.Driver;
 using MongoDB.Bson;
@@ -16,12 +19,20 @@ builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, relo
     .AddJsonFile("admin.local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 builder.Services.AddMongoDatabase(builder.Configuration);
+if (!builder.Environment.IsDevelopment())
+{
+    var encryptionKey = builder.Configuration["DataProtection:EncryptionKey"];
+    if (string.IsNullOrWhiteSpace(encryptionKey)) throw new InvalidOperationException("Configure a chave de proteção de sessões.");
+    builder.Services.AddSingleton<IXmlRepository>(provider => new MongoEncryptedXmlRepository(provider.GetRequiredService<IMongoDatabase>(), encryptionKey));
+    builder.Services.AddDataProtection().SetApplicationName("QualityHub");
+    builder.Services.AddOptions<KeyManagementOptions>().Configure<IXmlRepository>((options, repository) => options.XmlRepository = repository);
+}
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
     options.Cookie.Name = "dashboardmetrics.session";
     options.Cookie.HttpOnly = true;
     options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
     options.ExpireTimeSpan = TimeSpan.FromHours(8);
     options.SlidingExpiration = false;
     options.Events.OnRedirectToLogin = context => { context.Response.StatusCode = 401; return Task.CompletedTask; };

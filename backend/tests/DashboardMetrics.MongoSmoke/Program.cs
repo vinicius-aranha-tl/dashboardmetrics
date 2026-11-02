@@ -4,6 +4,8 @@ using DashboardMetrics.Infra;
 using MongoDB.Driver;
 using MongoDB.Bson;
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Xml.Linq;
 
 // Explicitly restricted to the test database on this machine.
 var database = new MongoClient("mongodb://127.0.0.1:27017").GetDatabase("dashboardmetrics_migration_tests");
@@ -12,6 +14,7 @@ var widgets = new MongoWidgetRepository(database);
 var snapshots = new MongoMetricSnapshotRepository(database);
 var project = new Project { Name = "Smoke test", Slug = $"test-{Guid.NewGuid():N}" };
 var widget = new DashboardWidget { ProjectId = project.Id, Product = "api", WidgetType = "success_gauge", Title = "Test", Position = 1 };
+var keyName = $"smoke-{Guid.NewGuid():N}";
 
 try
 {
@@ -40,7 +43,13 @@ try
     using var saved = JsonDocument.Parse(await snapshots.GetLatestAsync(project.Id) ?? throw new Exception("Snapshot not found"));
     if (saved.RootElement.GetProperty("executions").GetArrayLength() != 1 || saved.RootElement.GetProperty("evolution").GetProperty("api").GetArrayLength() != 1)
         throw new Exception("Snapshot deduplication or scheduled filter failed");
-    Console.WriteLine("MongoDB project, widget and metric snapshot checks passed.");
+    var key = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
+    var keyRepository = new MongoEncryptedXmlRepository(database, key);
+    keyRepository.StoreElement(new XElement("test-key", "private-value"), keyName);
+    var storedKey = await database.GetCollection<BsonDocument>("data_protection_keys").Find(Builders<BsonDocument>.Filter.Eq("_id", keyName)).FirstAsync();
+    if (storedKey.ToJson().Contains("private-value", StringComparison.Ordinal) || !keyRepository.GetAllElements().Any(e => e.Value == "private-value"))
+        throw new Exception("Data protection key encryption failed");
+    Console.WriteLine("MongoDB project, widget, metric snapshot and encrypted session key checks passed.");
 }
 finally
 {
@@ -48,4 +57,5 @@ finally
     await projects.DeleteAsync(project.Id);
     foreach (var name in new[] { "metric_snapshots", "metric_executions", "metric_evolution" })
         await database.GetCollection<BsonDocument>(name).DeleteManyAsync(Builders<BsonDocument>.Filter.Eq("projectId", project.Id));
+    await database.GetCollection<BsonDocument>("data_protection_keys").DeleteOneAsync(Builders<BsonDocument>.Filter.Eq("_id", keyName));
 }
