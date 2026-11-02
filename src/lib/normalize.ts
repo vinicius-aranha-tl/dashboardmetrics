@@ -1,4 +1,5 @@
 import type { EvolutionPoint, Execution, Product, TestResult, Trigger } from "@/lib/metrics";
+import { groupFailureOccurrences } from "@/lib/metrics";
 
 /** Files published by the automations under squaredup/ on the metrics branch. */
 export const SQUAREDUP_FILES: Record<Product, string[]> = {
@@ -9,12 +10,15 @@ export const SQUAREDUP_FILES: Record<Product, string[]> = {
   ],
   ui: [
     "latest.json", "history.json", "test-history.json", "test-stability-30d.json", "execution-trend-30d.json",
-    "period-comparison.json", "failure-reasons-30d.json", "failure-lifecycle.json",
+    "period-comparison.json", "failure-reasons-30d.json", "failure-lifecycle.json", "ui-automation-evolution.json",
   ],
 };
 /** Which file feeds executions and weekly evolution. */
 export const EXECUTIONS_FILE = "history.json";
-export const EVOLUTION_FILE: Record<Product, string | null> = { api: "api-automation-evolution.json", ui: null };
+export const EVOLUTION_FILE: Record<Product, string> = {
+  api: "api-automation-evolution.json",
+  ui: "ui-automation-evolution.json",
+};
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -64,7 +68,8 @@ function toTrigger(v: unknown): Trigger {
   const s = String(v ?? "").toLowerCase();
   if (s.includes("merge") || s === "push" || s === "pull_request") return "post-merge";
   if (s.includes("manual") || s === "workflow_dispatch") return "manual";
-  return "scheduled";
+  if (s === "schedule" || s === "scheduled") return "scheduled";
+  return "unknown";
 }
 
 export class FormatError extends Error {}
@@ -179,12 +184,12 @@ export function normalizeStability(raw: unknown, dataSource: string): StabilityR
         dataSource: str(t["dataSourceName"]) || dataSource,
       };
     })
-    .filter((r) => r.failureExecutions > 0);
+    .filter((r) => r.failureExecutions >= 3);
 }
 
 /** failure-reasons-30d.json → { failures (table), reasons (donut, definitive failures only — flaky excluded) }. */
 export function normalizeReasons(raw: unknown, dataSource: string): { failures: SpecialFailureRow[]; reasons: ReasonRow[] } {
-  const failures = needList(raw, "failures").map((f, i) => failureRow(f, i, dataSource));
+  const failures = groupFailureOccurrences(needList(raw, "failures").map((f, i) => failureRow(f, i, dataSource)));
   const reasons = needList(raw, "reasons")
     .map((r) => ({ cause: str(r["reason"]) || "Sem classificação", value: num(pick(r, ["failedOccurrences", "occurrences"])) }))
     .filter((r) => r.value > 0);
@@ -195,9 +200,9 @@ export function normalizeReasons(raw: unknown, dataSource: string): { failures: 
 export function normalizeLifecycle(raw: unknown, dataSource: string): SpecialFailureRow[] {
   const seen = new Map<string, string>();
   if (isObj(raw) && Array.isArray(raw["tests"])) for (const t of raw["tests"] as unknown[]) if (isObj(t)) seen.set(str(t["testKey"]), str(t["firstSeen"]));
-  return needList(raw, "failures")
+  return groupFailureOccurrences(needList(raw, "failures")
     .map((f, i) => { const row = failureRow(f, i, dataSource); if (!row.firstSeen) row.firstSeen = seen.get(str(f["testKey"])) ?? ""; return row; })
-    .sort((a, b) => b.occurrences - a.occurrences);
+  );
 }
 
 function failureRow(f: Obj, i: number, dataSource: string): SpecialFailureRow {

@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleAlert, FlaskConical } from "lucide-react";
+import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ProjectData, SourceStatus } from "@/lib/sources.functions";
 import type { Product } from "@/lib/metrics";
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export function SourceStatusPill({ s, label }: { s: SourceStatus; label: string }) {
   const meta = {
     github: { icon: CheckCircle2, cls: "border-success/40 text-success", text: "GitHub" },
-    demo: { icon: FlaskConical, cls: "border-warning/40 text-warning", text: "Demonstração" },
+    unavailable: { icon: CircleDashed, cls: "border-warning/40 text-warning", text: "Indisponível" },
     error: { icon: CircleAlert, cls: "border-danger/50 text-danger", text: "Erro" },
   }[s.mode];
   const Icon = meta.icon;
@@ -19,7 +19,7 @@ export function SourceStatusPill({ s, label }: { s: SourceStatus; label: string 
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs">
-        {s.mode === "demo" && "Fonte não configurada — exibindo dados de demonstração."}
+        {s.mode === "unavailable" && `${s.message ?? "Fonte ainda não publicada."} Nenhum dado de demonstração é exibido.`}
         {s.mode === "github" && `${s.records ?? 0} registros lidos de ${s.url}`}
         {s.mode === "error" && `${s.message} — nenhum dado exibido para esta fonte.`}
       </TooltipContent>
@@ -28,13 +28,16 @@ export function SourceStatusPill({ s, label }: { s: SourceStatus; label: string 
 }
 
 export function SourceBadges({ projects, product }: { projects: ProjectData[]; product: Product }) {
+  const problems = projects.filter((p) => p.refreshError || p.sources[product].executions.mode !== "github" || p.sources[product].evolution.mode === "error");
+  if (!problems.length) return null;
   return (
     <div className="flex flex-wrap gap-2">
-      {projects.map((p) => (
+      {problems.map((p) => (
         <div key={p.project.id} className="flex flex-wrap items-center gap-1.5">
           {projects.length > 1 && <span className="text-xs font-medium text-muted-foreground">{p.project.name}</span>}
-          <SourceStatusPill s={p.sources[product].executions} label="Execuções" />
-          <SourceStatusPill s={p.sources[product].evolution} label="Evolução" />
+          {p.refreshError && <span className="text-xs text-warning" role="status">{p.refreshError}</span>}
+          {p.sources[product].executions.mode !== "github" && <SourceStatusPill s={p.sources[product].executions} label="Execuções" />}
+          {p.sources[product].evolution.mode === "error" && <SourceStatusPill s={p.sources[product].evolution} label="Evolução" />}
         </div>
       ))}
     </div>

@@ -11,7 +11,7 @@
  * classes (e.g. --color-primary -> bg-primary, text-primary).
  *
  * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
+ * The theme uses reusable CSS color tokens.
  *
  * To add a new semantic color:
  * 1. Add the variable to :root (light value) and .dark (dark value)
@@ -68,6 +68,54 @@
   --font-sans: var(--app-font-sans);
   --font-display: var(--app-font-display);
   --font-mono: var(--app-font-mono);
+}
+
+/* Quality Hub palette: neutral light chrome and dark metric surfaces. */
+html:root {
+  --background: #fafafa; --foreground: #202124;
+  --card: #ffffff; --card-foreground: #202124;
+  --popover: #ffffff; --popover-foreground: #202124;
+  --primary: #111111; --primary-foreground: #ffffff;
+  --secondary: #edeef0; --secondary-foreground: #202124;
+  --muted: #edeef0; --muted-foreground: #686b72;
+  --accent: #e9ebee; --accent-foreground: #202124;
+  --destructive: #be2838; --destructive-foreground: #ffffff;
+  --border: #dedfe2; --input: #dedfe2; --ring: #397cc9;
+  --metric-orange: #ffb76b; --metric-mint: #72dfb0;
+  --metric-blue: #83b7ff; --metric-purple: #c4a3ff;
+  --metric-cyan: #65d4dc; --metric-red: #ff7b86;
+  --success: #167352; --warning: #8a5109; --danger: #b82f40;
+  --product: var(--metric-blue); --automation: var(--metric-orange); --projection: var(--metric-purple);
+  --gauge-track: #50545a;
+  --chart-1: var(--metric-red); --chart-2: var(--metric-orange);
+  --chart-3: var(--metric-mint); --chart-4: var(--metric-blue); --chart-5: var(--metric-purple);
+  --sidebar: #34373c; --sidebar-foreground: #f5f5f5;
+  --sidebar-primary: #111111; --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #4a4e55; --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #555a61; --sidebar-ring: #83b7ff;
+}
+
+.quality-surface {
+  --background: #34373c; --foreground: #f5f5f6;
+  --card: #34373c; --card-foreground: #f5f5f6;
+  --muted: #41454b; --muted-foreground: #c9cbd0;
+  --accent: #494d53; --accent-foreground: #ffffff;
+  --border: #50545a; --input: #676b72;
+  --success: var(--metric-mint); --warning: var(--metric-orange);
+  --danger: var(--metric-red); --destructive: var(--metric-red);
+}
+.quality-surface input:not([type="checkbox"]):not([type="radio"]),
+.quality-surface textarea {
+  background: #ffffff;
+  border-color: #dedfe2;
+  color: #202124;
+}
+.quality-surface input::placeholder, .quality-surface textarea::placeholder { color: #686b72; }
+.quality-surface :is(.grid, .overflow-x-auto) { min-width: 0; max-width: 100%; }
+
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
 
 :root {

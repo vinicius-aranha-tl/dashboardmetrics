@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, FileDown, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, FileDown, Pencil, Plus, RotateCcw, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { backend } from "@/lib/backend-client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { ORIGIN_LABEL, PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
+import { PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
 import { exportDashboardPdf } from "@/lib/pdfExport";
 import { CHART_KINDS, ChartIcon } from "./chartKinds";
 import type { Product } from "@/lib/metrics";
@@ -34,21 +34,37 @@ function defaultsFor(isOverview: boolean): Omit<Widget, "id">[] {
   return list.map((w, i) => ({ ...w, title: WIDGET_CATALOG[w.widget_type].defaultTitle, position: i }));
 }
 
-export function Dashboard({ projectId, slug, name }: { projectId: string | null; slug: string | null; name?: string }) {
+function MetricExplanation({ type }: { type: string }) {
+  const item = WIDGET_CATALOG[type as WidgetType];
+  if (!item) return null;
+  const paragraphs = type === "summary_cards"
+    ? (item.info ?? "").split(/(?=Testes:|Execuções válidas:|Falhas definitivas:|Flaky tests:)/).filter(Boolean)
+    : (item.info ?? "").split(/(?<=\.)\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ])/u).filter(Boolean);
+  return <><div><p className="font-semibold">O que mostra</p><p>{item.description}</p></div>{paragraphs.length > 0 && <div className="space-y-2"><p className="font-semibold">Como interpretar</p>{paragraphs.map((paragraph, index) => {
+    const match = paragraph.match(/^([^:]{1,35}):\s+(.+)$/s);
+    return <p key={index}>{match ? <><strong>{match[1]}:</strong> {match[2]}</> : paragraph}</p>;
+  })}</div>}</>;
+}
+
+export function Dashboard({ projectId, slug, name, onSources }: { projectId: string | null; slug: string | null; name?: string; onSources?: (() => void) | undefined }) {
   const [product, setProduct] = useState<Product>("api");
   const [exporting, setExporting] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const { canEdit } = useAuth();
   const { filters } = useFilters();
-  const refs = { api: useRef<HTMLDivElement>(null), ui: useRef<HTMLDivElement>(null) };
+  const apiData = useDashboardData(slug, "api");
+  const uiData = useDashboardData(slug, "ui");
+  useEffect(() => { setEditMode(false); }, [projectId]);
 
   async function exportPdf() {
     setExporting(true);
     try {
-      await new Promise((r) => setTimeout(r, 1200)); // let hidden tab charts lay out
+      if (!apiData.d || !uiData.d) throw new Error("Aguarde os dados de API e UI terminarem de carregar.");
       const title = name ?? "Visão geral — todos os projetos";
       await exportDashboardPdf({
         title,
-        subtitle: `Período: ${PERIOD_LABEL[filters.period]} · Origens: ${filters.origins.map((o) => ORIGIN_LABEL[o]).join(", ")}`,
-        sections: (["api", "ui"] as const).map((p) => ({ label: `Automação de ${p.toUpperCase()}`, root: refs[p].current! })),
+        subtitle: `Período selecionado: ${PERIOD_LABEL[filters.period]}`,
+        sections: [{ product: "api", data: apiData.d }, { product: "ui", data: uiData.d }],
         filename: `${(slug ?? "visao-geral")}-${new Date().toISOString().slice(0, 10)}.pdf`,
       });
       toast.success("PDF gerado");
@@ -68,43 +84,43 @@ export function Dashboard({ projectId, slug, name }: { projectId: string | null;
             <TabsTrigger value="ui">UI</TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button variant="secondary" size="sm" disabled={exporting} onClick={exportPdf}><FileDown className="h-4 w-4" /> {exporting ? "Gerando PDF…" : "Gerar PDF (API + UI)"}</Button>
+        <div className="flex flex-wrap gap-2">
+          {canEdit && <Button size="sm" variant={editMode ? "secondary" : "outline"} aria-pressed={editMode} onClick={() => setEditMode((current) => !current)}><Pencil className="h-4 w-4" /> {editMode ? "Concluir edição" : "Editar painel"}</Button>}
+          {canEdit && editMode && onSources && <Button size="sm" variant="outline" onClick={onSources}><Settings2 className="h-4 w-4" /> Fontes do GitHub</Button>}
+          <Button size="sm" disabled={exporting} onClick={exportPdf}><FileDown className="h-4 w-4" /> {exporting ? "Gerando relatório…" : "Exportar relatório"}</Button>
+        </div>
       </div>
       {(["api", "ui"] as const).map((p) => (
-        <div key={p} ref={refs[p]} className={cn(p !== product && (exporting ? "fixed top-0 -left-[10000px] w-[1200px]" : "hidden"))}>
-          <ProductDashboard projectId={projectId} slug={slug} product={p} />
+        <div key={p} className={cn(p !== product && "hidden")}>
+          <ProductDashboard projectId={projectId} slug={slug} product={p} editMode={editMode} />
         </div>
       ))}
     </div>
   );
 }
 
-function ProductDashboard({ projectId, slug, product }: { projectId: string | null; slug: string | null; product: Product }) {
-  const { isAdmin } = useAuth();
+function ProductDashboard({ projectId, slug, product, editMode }: { projectId: string | null; slug: string | null; product: Product; editMode: boolean }) {
+  const { canEdit } = useAuth();
   const qc = useQueryClient();
   const { d, error, isLoading, periodLabel } = useDashboardData(slug, product);
   const widgetsKey = ["widgets", projectId, product];
   const wq = useQuery({
     queryKey: widgetsKey,
     queryFn: async () => {
-      let q = supabase.from("dashboard_widgets").select("id, widget_type, title, width, position").eq("product", product).order("position");
-      q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data as Widget[];
+      return backend.widgets(projectId, product);
     },
   });
   const stored = wq.data ?? [];
   const widgets: Widget[] = stored.length ? stored : defaultsFor(!projectId).map((w) => ({ ...w, id: null }));
   const [editing, setEditing] = useState<Widget | "new" | null>(null);
+  useEffect(() => { if (!editMode) setEditing(null); }, [editMode]);
 
   /** Defaults are virtual until the first edit; persist them so edits have rows to act on. */
   async function materialize(): Promise<Widget[]> {
     if (stored.length) return stored;
     const rows = defaultsFor(!projectId).map((w) => ({ ...w, product, project_id: projectId }));
-    const { data, error } = await supabase.from("dashboard_widgets").insert(rows).select("id, widget_type, title, width, position");
-    if (error) throw error;
-    return (data as Widget[]).sort((a, b) => a.position - b.position);
+    const data = await Promise.all(rows.map((row) => backend.createWidget(row)));
+    return data.sort((a, b) => a.position - b.position);
   }
 
   const mutate = useMutation({
@@ -120,44 +136,40 @@ function ProductDashboard({ projectId, slug, product }: { projectId: string | nu
       const j = i + dir;
       if (j < 0 || j >= rows.length) return;
       const a = rows[i]!, b = rows[j]!;
-      await supabase.from("dashboard_widgets").update({ position: b.position }).eq("id", a.id!);
-      await supabase.from("dashboard_widgets").update({ position: a.position }).eq("id", b.id!);
+      await backend.updateWidget({ ...a, id: a.id!, product, project_id: projectId, position: b.position });
+      await backend.updateWidget({ ...b, id: b.id!, product, project_id: projectId, position: a.position });
     });
   const remove = (w: Widget) =>
     mutate.mutate(async (rows) => {
-      const { error } = await supabase.from("dashboard_widgets").delete().eq("id", findRow(rows, w).id!);
-      if (error) throw error;
+      await backend.deleteWidget(findRow(rows, w).id!);
     });
   const reset = () =>
     mutate.mutate(async () => {
-      let q = supabase.from("dashboard_widgets").delete().eq("product", product);
-      q = projectId ? q.eq("project_id", projectId) : q.is("project_id", null);
-      const { error } = await q;
-      if (error) throw error;
+      await backend.deleteWidgets(projectId, product);
     });
   const save = (form: { widget_type: string; title: string; width: "half" | "full" }) =>
     mutate.mutate(async (rows) => {
       if (editing === "new") {
         const position = Math.max(-1, ...rows.map((r) => r.position)) + 1;
-        const { error } = await supabase.from("dashboard_widgets").insert({ ...form, position, product, project_id: projectId });
-        if (error) throw error;
+        await backend.createWidget({ ...form, position, product, project_id: projectId });
       } else if (editing) {
-        const { error } = await supabase.from("dashboard_widgets").update(form).eq("id", findRow(rows, editing).id!);
-        if (error) throw error;
+        const row = findRow(rows, editing);
+        await backend.updateWidget({ ...row, ...form, id: row.id!, product, project_id: projectId });
       }
       setEditing(null);
     });
 
   if (error) return <EmptyState>Não foi possível carregar os dados: {(error as Error).message}</EmptyState>;
+  if (wq.error) return <EmptyState><div className="grid justify-items-center gap-3"><span>Não foi possível carregar a configuração dos gráficos.</span><Button variant="outline" onClick={() => wq.refetch()}>Tentar novamente</Button></div></EmptyState>;
   if (isLoading || !d || wq.isLoading)
     return <div className="grid gap-4 md:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-56 rounded-xl" />)}</div>;
   if (!d.projects.length) return <EmptyState>Nenhum projeto cadastrado ainda. Crie um em Projetos.</EmptyState>;
 
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 empty:hidden">
         <SourceBadges projects={d.projects} product={product} />
-        {isAdmin && (
+        {canEdit && editMode && (
           <div className="flex gap-2">
             {stored.length > 0 && <Button variant="ghost" size="sm" onClick={reset}><RotateCcw className="h-4 w-4" /> Restaurar padrão</Button>}
             <Button variant="secondary" size="sm" onClick={() => setEditing("new")}><Plus className="h-4 w-4" /> Adicionar gráfico</Button>
@@ -171,12 +183,12 @@ function ProductDashboard({ projectId, slug, product }: { projectId: string | nu
           {widgets.map((w, i) => (
             <Panel
               key={w.id ?? `d${i}`}
-              title={`${w.title} — ${product.toUpperCase()}`}
-              info={WIDGET_CATALOG[w.widget_type as WidgetType]?.info}
+              title={w.widget_type === "evolution" && w.title === "Evolução do produto versus automação" ? WIDGET_CATALOG.evolution.defaultTitle : w.title}
+              info={<><MetricExplanation type={w.widget_type} /><div className="space-y-1"><p className="font-semibold">Fontes de dados</p>{(w.widget_type === "flaky_table" ? d.specialByProduct.flaky.used : w.widget_type === "failure_details" ? d.specialByProduct.failures.used : w.widget_type === "cause_donut" ? d.specialByProduct.reasons.used : w.widget_type === "failure_history" ? d.specialByProduct.lifecycle.used : []).map((u, index) => <p key={index}>{u.product.toUpperCase()}: {u.file}{u.fallback ? ` (alternativa${u.reason ? `: ${u.reason}` : ""})` : ""}</p>)}{!["flaky_table", "failure_details", "cause_donut", "failure_history"].includes(w.widget_type) && d.projects.map(p => <p key={p.project.id}>{p.project.name}: {product.toUpperCase()} — {w.widget_type === "evolution" || w.widget_type === "coverage_waterfall" ? "evolução" : "execuções"} ({(w.widget_type === "evolution" || w.widget_type === "coverage_waterfall" ? p.sources[product].evolution : p.sources[product].executions).mode})</p>)}</div></>}
               className={cn(w.width === "full" && "lg:col-span-2")}
               pdfInfo={`${WIDGET_CATALOG[w.widget_type as WidgetType]?.description ?? ""} ${WIDGET_CATALOG[w.widget_type as WidgetType]?.info ?? ""}`.trim()}
               action={
-                isAdmin && (
+                canEdit && editMode && (
                   <div className="flex gap-0.5" data-pdf-ignore>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Mover para cima" disabled={i === 0} onClick={() => move(w, -1)}><ArrowUp className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Mover para baixo" disabled={i === widgets.length - 1} onClick={() => move(w, 1)}><ArrowDown className="h-3.5 w-3.5" /></Button>
@@ -191,7 +203,7 @@ function ProductDashboard({ projectId, slug, product }: { projectId: string | nu
           ))}
         </div>
       )}
-      {editing && <WidgetDialog initial={editing === "new" ? null : editing} isOverview={!projectId} onClose={() => setEditing(null)} onSave={save} saving={mutate.isPending} />}
+      {canEdit && editMode && editing && <WidgetDialog initial={editing === "new" ? null : editing} isOverview={!projectId} onClose={() => setEditing(null)} onSave={save} saving={mutate.isPending} />}
     </div>
   );
 }

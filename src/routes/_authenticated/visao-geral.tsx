@@ -5,9 +5,9 @@ import { PageTitle } from "@/components/dash/primitives";
 export const Route = createFileRoute("/_authenticated/visao-geral")({
   head: () => ({
     meta: [
-      { title: "Visão geral — Dashboard Metrics for QA" },
+      { title: "Visão geral — Quality Hub" },
       { name: "description", content: "Automação de API e UI de todos os projetos integrados." },
-      { property: "og:title", content: "Visão geral — Dashboard Metrics for QA" },
+      { property: "og:title", content: "Visão geral — Quality Hub" },
       { property: "og:description", content: "Automação de API e UI de todos os projetos integrados." },
     ],
   }),

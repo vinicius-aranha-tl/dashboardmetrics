@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedBugsRouteImport } from './routes/_authenticated/bugs'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as AuthenticatedVisaoGeralRouteImport } from './routes/_authenticated/visao-geral'
 import { Route as AuthenticatedProjetosIndexRouteImport } from './routes/_authenticated/projetos.index'
@@ -30,6 +31,11 @@ const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedBugsRoute = AuthenticatedBugsRouteImport.update({
+  id: '/bugs',
+  path: '/bugs',
+  getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   id: '/usuarios',
@@ -57,6 +63,7 @@ const AuthenticatedProjetosSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/bugs': typeof AuthenticatedBugsRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
   '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/bugs': typeof AuthenticatedBugsRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/visao-geral': typeof AuthenticatedVisaoGeralRoute
   '/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/bugs': typeof AuthenticatedBugsRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/_authenticated/visao-geral': typeof AuthenticatedVisaoGeralRoute
   '/_authenticated/projetos/$slug': typeof AuthenticatedProjetosSlugRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/bugs'
     | '/usuarios'
     | '/visao-geral'
     | '/projetos/$slug'
@@ -93,6 +103,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/bugs'
     | '/usuarios'
     | '/visao-geral'
     | '/projetos/$slug'
@@ -102,6 +113,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/bugs'
     | '/_authenticated/usuarios'
     | '/_authenticated/visao-geral'
     | '/_authenticated/projetos/$slug'
@@ -137,6 +149,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/bugs': {
+      id: '/_authenticated/bugs'
+      path: '/bugs'
+      fullPath: '/bugs'
+      preLoaderRoute: typeof AuthenticatedBugsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/usuarios': {
       id: '/_authenticated/usuarios'
       path: '/usuarios'
@@ -169,6 +188,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedBugsRoute: typeof AuthenticatedBugsRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
   AuthenticatedVisaoGeralRoute: typeof AuthenticatedVisaoGeralRoute
   AuthenticatedProjetosSlugRoute: typeof AuthenticatedProjetosSlugRoute
@@ -176,6 +196,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedBugsRoute: AuthenticatedBugsRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
   AuthenticatedVisaoGeralRoute: AuthenticatedVisaoGeralRoute,
   AuthenticatedProjetosSlugRoute: AuthenticatedProjetosSlugRoute,

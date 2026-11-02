@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderKanban, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { backend, projectInput, type ProjectRecord } from "@/lib/backend-client";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,9 +15,9 @@ import { useAuth } from "@/hooks/useAuth";
 export const Route = createFileRoute("/_authenticated/projetos/")({
   head: () => ({
     meta: [
-      { title: "Projetos — Dashboard Metrics for QA" },
+      { title: "Projetos — Quality Hub" },
       { name: "description", content: "Projetos integrados e suas fontes de dados do GitHub." },
-      { property: "og:title", content: "Projetos — Dashboard Metrics for QA" },
+      { property: "og:title", content: "Projetos — Quality Hub" },
       { property: "og:description", content: "Projetos integrados e suas fontes de dados do GitHub." },
     ],
   }),
@@ -27,39 +27,37 @@ export const Route = createFileRoute("/_authenticated/projetos/")({
 export const projectsQuery = {
   queryKey: ["projects"],
   queryFn: async () => {
-    const { data, error } = await supabase.from("projects").select("*").order("name");
-    if (error) throw error;
-    return data;
+    return backend.projects();
   },
 };
 
-type Proj = { id: string; name: string; slug: string; description: string };
+type Proj = ProjectRecord;
 
 const slugify = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
 function ProjectsPage() {
-  const { isAdmin } = useAuth();
+  const { canEdit: isAdmin } = useAuth();
   const q = useQuery(projectsQuery);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Proj | null>(null);
   const [deleting, setDeleting] = useState<Proj | null>(null);
-  const count = (p: NonNullable<typeof q.data>[number]) => [p.api_executions_url, p.api_evolution_url, p.ui_executions_url, p.ui_evolution_url].filter(Boolean).length;
+  const count = (p: NonNullable<typeof q.data>[number]) => Number(Boolean(p.api_repo_owner && p.api_repo_name)) + Number(Boolean(p.ui_repo_owner && p.ui_repo_name));
   return (
     <>
       <div className="flex items-start justify-between gap-4">
         <PageTitle title="Projetos" subtitle="Cada projeto tem seus próprios painéis de API e UI e suas conexões com o GitHub." />
         {isAdmin && <Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Novo projeto</Button>}
       </div>
-      {q.isLoading ? null : !q.data?.length ? (
+      {q.error ? <EmptyState><div className="grid justify-items-center gap-3"><span>Não foi possível carregar os projetos.</span><Button variant="outline" onClick={() => q.refetch()}>Tentar novamente</Button></div></EmptyState> : q.isLoading ? null : !q.data?.length ? (
         <EmptyState>Nenhum projeto ainda.</EmptyState>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {q.data.map((p) => (
-            <Link key={p.id} to="/projetos/$slug" params={{ slug: p.slug }} className="group rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/60">
+            <Link key={p.id} to="/projetos/$slug" params={{ slug: p.slug }} className="quality-surface group rounded-xl border border-border bg-card p-5 text-card-foreground shadow-sm transition-colors hover:border-[#83b7ff]">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary text-primary"><FolderKanban className="h-5 w-5" /></div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-display font-semibold group-hover:text-primary">{p.name}</div>
+                  <div className="truncate font-display font-semibold group-hover:text-product">{p.name}</div>
                   <div className="text-xs text-muted-foreground">Criado em {fmtDate(p.created_at.slice(0, 10))}</div>
                 </div>
                 {isAdmin && (
@@ -70,7 +68,7 @@ function ProjectsPage() {
                 )}
               </div>
               {p.description && <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{p.description}</p>}
-              <div className={`mt-4 text-xs ${count(p) === 4 ? "text-success" : "text-warning"}`}>{count(p)} de 4 fontes do GitHub conectadas</div>
+              <div className={`mt-4 text-xs ${count(p) === 2 ? "text-success" : "text-warning"}`}>{count(p)} de 2 repositórios do GitHub configurados</div>
             </Link>
           ))}
         </div>
@@ -91,9 +89,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
     mutationFn: async () => {
       const slug = slugify(name);
       if (!slug) throw new Error("Informe um nome válido.");
-      const { data: u } = await supabase.auth.getUser();
-      const { error } = await supabase.from("projects").insert({ name: name.trim(), slug, description: description.trim(), created_by: u.user?.id ?? null });
-      if (error) throw new Error(error.code === "23505" ? "Já existe um projeto com esse nome." : error.message);
+      await backend.createProject({ name: name.trim(), slug, description: description.trim() });
       return slug;
     },
     onSuccess: (slug) => {
@@ -129,8 +125,7 @@ function EditProjectDialog({ project, onClose }: { project: Proj; onClose: () =>
     mutationFn: async () => {
       const slug = slugify(name);
       if (!slug) throw new Error("Informe um nome válido.");
-      const { error } = await supabase.from("projects").update({ name: name.trim(), slug, description: description.trim(), updated_at: new Date().toISOString() }).eq("id", project.id);
-      if (error) throw new Error(error.code === "23505" ? "Já existe um projeto com esse nome." : error.message);
+      await backend.updateProject(project.id, { ...projectInput(project), name: name.trim(), slug, description: description.trim() });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -161,8 +156,7 @@ function DeleteProjectDialog({ project, onClose }: { project: Proj; onClose: () 
   const qc = useQueryClient();
   const m = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("projects").delete().eq("id", project.id);
-      if (error) throw new Error(error.message);
+      await backend.deleteProject(project.id);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });

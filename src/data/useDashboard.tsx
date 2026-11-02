@@ -1,14 +1,14 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { aggregateEvolution, dedupeExecutions, failureRows, filterExecutions, flakyTable, causeDistribution, type Product, type Trigger } from "@/lib/metrics";
+import { aggregateEvolution, dedupeExecutions, failureRows, filterExecutions, flakyTable, causeDistribution, groupFailureOccurrences, type Product, type Trigger } from "@/lib/metrics";
 import type { ReasonRow, SpecialFailureRow, StabilityRow } from "@/lib/normalize";
 import type { ProjectData } from "@/lib/sources.functions";
 import { loadDashboardData } from "@/lib/sources.functions";
 
-export type PeriodKey = "7" | "30" | "90" | "all";
-export const PERIOD_LABEL: Record<PeriodKey, string> = { "7": "Últimos 7 dias", "30": "Últimos 30 dias", "90": "Últimos 90 dias", all: "Todo o histórico" };
-export const ORIGIN_LABEL: Record<Trigger, string> = { scheduled: "Agendada", "post-merge": "Pós-merge", manual: "Manual" };
+export type PeriodKey = "7" | "15" | "30" | "90" | "all";
+export const PERIOD_LABEL: Record<PeriodKey, string> = { "7": "Últimos 7 dias", "15": "Últimos 15 dias", "30": "Últimos 30 dias", "90": "Últimos 90 dias", all: "Todo o histórico" };
+export const ORIGIN_LABEL: Record<Trigger, string> = { scheduled: "Agendada", "post-merge": "Pós-merge", manual: "Manual", unknown: "Desconhecida" };
 
 interface Filters {
   period: PeriodKey;
@@ -18,7 +18,7 @@ interface Filters {
 const Ctx = createContext<{ filters: Filters; setFilters: (f: Filters) => void } | null>(null);
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
-  const [filters, setFilters] = useState<Filters>({ period: "30", origins: ["scheduled", "post-merge", "manual"] });
+  const [filters, setFilters] = useState<Filters>({ period: "30", origins: ["scheduled"] });
   return <Ctx.Provider value={{ filters, setFilters }}>{children}</Ctx.Provider>;
 }
 
@@ -38,12 +38,12 @@ export function requestForcedRefresh() {
 export function useDashboardData(slug: string | null, product: Product) {
   const { filters } = useFilters();
   const load = useServerFn(loadDashboardData);
-  const q = useQuery({ queryKey: ["dataset", slug], queryFn: () => load({ data: { slug, force: Date.now() < forceUntil } }), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ["dataset", slug], queryFn: () => load({ data: { slug, force: Date.now() < forceUntil } }), staleTime: 5 * 60_000, refetchInterval: 5 * 60_000 });
   const d = useMemo(() => {
     if (!q.data) return null;
     const now = new Date();
     const all = q.data.flatMap((p) => p.executions);
-    const valid = dedupeExecutions(all).filter((e) => e.product === product);
+    const valid = dedupeExecutions(all).filter((e) => e.product === product && e.trigger === "scheduled");
     const periodDays = filters.period === "all" ? null : Number(filters.period);
     const base = { product, origins: filters.origins, now };
     return {
@@ -54,6 +54,7 @@ export function useDashboardData(slug: string | null, product: Product) {
       evolution: aggregateEvolution(q.data.map((p) => p.evolution[product])),
       periodDays,
       special: buildSpecial(q.data, now),
+      specialByProduct: buildSpecial(q.data, now, product),
     };
   }, [q.data, filters, product]);
   return { ...q, d, periodLabel: PERIOD_LABEL[filters.period] };
@@ -70,31 +71,32 @@ export interface SpecialData {
   lifecycle: { rows: SpecialFailureRow[]; used: SourceUse[] };
 }
 
-/** API + UI grouped. Specialized file is primary; history.json only when the file is missing/failed (demo projects use their demo history). */
-export function buildSpecial(projects: ProjectData[], now: Date): SpecialData {
+/** API + UI grouped. Specialized file is primary; history.json is the labeled real-data fallback when a specialized file is unavailable. */
+export function buildSpecial(projects: ProjectData[], now: Date, selectedProduct?: Product): SpecialData {
   const out: SpecialData = { flaky: { rows: [], used: [] }, failures: { rows: [], used: [] }, reasons: { rows: [], used: [] }, lifecycle: { rows: [], used: [] } };
-  const origins: Trigger[] = ["scheduled", "post-merge", "manual"];
-  const use = (list: SourceUse[], u: SourceUse) => { if (!list.some((x) => x.product === u.product && x.file === u.file && x.fallback === u.fallback)) list.push(u); };
+  const origins: Trigger[] = ["scheduled"];
+  const trackSource = (list: SourceUse[], u: SourceUse) => { if (!list.some((x) => x.product === u.product && x.file === u.file && x.fallback === u.fallback)) list.push(u); };
   for (const p of projects)
     for (const product of ["api", "ui"] as const) {
+      if (selectedProduct && selectedProduct !== product) continue;
       const sp = p.special?.[product];
       const mine = dedupeExecutions(p.executions).filter((e) => e.product === product);
       const d30 = filterExecutions(mine, { product, origins, periodDays: 30, now });
-      const reason = (s?: { status: { mode: string; message?: string } }) => (s?.status.mode === "error" ? s.status.message : s?.status.mode === "demo" ? "fonte não configurada (demonstração)" : undefined);
-      const fb = (f: SpecialData[keyof SpecialData]["used"], s: { status: { mode: string; message?: string } } | undefined) => use(f, { product, file: "history.json", fallback: true, reason: reason(s) });
+      const reason = (s?: { status: { mode: string; message?: string } }) => (s?.status.mode === "error" || s?.status.mode === "unavailable" ? s.status.message : undefined);
+      const fb = (f: SpecialData[keyof SpecialData]["used"], s: { status: { mode: string; message?: string } } | undefined) => trackSource(f, { product, file: "history.json", fallback: true, reason: reason(s) });
 
-      if (sp?.stability.data) { out.flaky.rows.push(...sp.stability.data); use(out.flaky.used, { product, file: sp.stability.file, fallback: false }); }
+      if (sp?.stability.data) { out.flaky.rows.push(...sp.stability.data); trackSource(out.flaky.used, { product, file: sp.stability.file, fallback: false }); }
       else { out.flaky.rows.push(...flakyTable(d30).map((r) => ({ ...r, successRate: r.executions ? Math.round(((r.executions - r.failureExecutions) / r.executions) * 10000) / 100 : null }))); fb(out.flaky.used, sp?.stability); }
 
       if (sp?.reasons.data) {
-        out.failures.rows.push(...sp.reasons.data.failures); out.reasons.rows.push(...sp.reasons.data.reasons);
-        use(out.failures.used, { product, file: sp.reasons.file, fallback: false }); use(out.reasons.used, { product, file: sp.reasons.file, fallback: false });
+        out.failures.rows.push(...groupFailureOccurrences(sp.reasons.data.failures)); out.reasons.rows.push(...sp.reasons.data.reasons);
+        trackSource(out.failures.used, { product, file: sp.reasons.file, fallback: false }); trackSource(out.reasons.used, { product, file: sp.reasons.file, fallback: false });
       } else {
         const rows = failureRows(d30); out.failures.rows.push(...rows); out.reasons.rows.push(...causeDistribution(rows));
         fb(out.failures.used, sp?.reasons); fb(out.reasons.used, sp?.reasons);
       }
 
-      if (sp?.lifecycle.data) { out.lifecycle.rows.push(...sp.lifecycle.data); use(out.lifecycle.used, { product, file: sp.lifecycle.file, fallback: false }); }
+      if (sp?.lifecycle.data) { out.lifecycle.rows.push(...groupFailureOccurrences(sp.lifecycle.data)); trackSource(out.lifecycle.used, { product, file: sp.lifecycle.file, fallback: false }); }
       else { out.lifecycle.rows.push(...failureRows(filterExecutions(mine, { product, origins, periodDays: null, now }))); fb(out.lifecycle.used, sp?.lifecycle); }
     }
   const merged = new Map<string, number>();

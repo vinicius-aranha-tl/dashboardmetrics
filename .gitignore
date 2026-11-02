@@ -14,7 +14,12 @@ dist-ssr
 .vinxi
 .tanstack/**
 .nitro
+**/bin/
+**/obj/
 *.local
+appsettings.local.json
+admin.local.json
+admin.local.json.*
 
 # Wrangler / Cloudflare
 .wrangler/
