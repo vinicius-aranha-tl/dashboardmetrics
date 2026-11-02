@@ -41,6 +41,25 @@ export interface DailyResult {
   unstable: number;
 }
 
+export interface DailyExecutionVolume {
+  date: string;
+  ciRuns: number;
+  scenarioRuns: number | null;
+}
+
+/** Count recorded runs and their results. Empty results are treated as unavailable, not zero. */
+export function dailyExecutionVolume(execs: Execution[]): DailyExecutionVolume[] {
+  const days = new Map<string, DailyExecutionVolume>();
+  for (const execution of execs) {
+    const day = days.get(execution.date) ?? { date: execution.date, ciRuns: 0, scenarioRuns: 0 };
+    day.ciRuns++;
+    if (!execution.results.length) day.scenarioRuns = null;
+    else if (day.scenarioRuns !== null) day.scenarioRuns += execution.results.length;
+    days.set(execution.date, day);
+  }
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 /** Keep only the first attempt of each trigger: reruns of the same Action are ignored. */
 export function dedupeExecutions(execs: Execution[]): Execution[] {
   const best = new Map<string, Execution>();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeProjection,
   countCoveredConditions,
+  dailyExecutionVolume,
   dedupeExecutions,
   failureRows,
   filterExecutions,
@@ -14,6 +15,20 @@ import {
 
 const ex = (o: Partial<Execution>): Execution => ({
   id: "x", product: "api", triggerId: "t1", runAttempt: 1, trigger: "scheduled", date: "2026-10-01", dataSource: "ds", results: [], ...o,
+});
+
+it("conta ações e cenários por dia sem contar reruns", () => {
+  const results = [{ title: "a", status: "passed" as const }, { title: "b", status: "failed" as const }];
+  const data = dedupeExecutions([
+    ex({ id: "1", triggerId: "projeto-a-1", results }),
+    ex({ id: "1", triggerId: "projeto-a-1", runAttempt: 2, results }),
+    ex({ id: "2", triggerId: "projeto-b-1", results }),
+    ex({ id: "3", triggerId: "projeto-a-2", date: "2026-10-02", results: [] }),
+  ]);
+  expect(dailyExecutionVolume(data)).toEqual([
+    { date: "2026-10-01", ciRuns: 2, scenarioRuns: 4 },
+    { date: "2026-10-02", ciRuns: 1, scenarioRuns: null },
+  ]);
 });
 
 it("filtra 15 dias incluindo hoje e os 14 dias anteriores", () => {

@@ -1,11 +1,34 @@
 import { Bar, BarChart, Funnel, FunnelChart, LabelList, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ReferenceArea, Scatter, ScatterChart, Treemap, ZAxis } from "recharts";
 import { Area, AreaChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { rateTone, type DailyResult, type Projection } from "@/lib/metrics";
+import { rateTone, type DailyExecutionVolume, type DailyResult, type Projection } from "@/lib/metrics";
 import { EmptyState, fmtDate, fmtInt, fmtPct } from "./primitives";
 
 const toneVar = { success: "var(--success)", warning: "var(--warning)", danger: "var(--danger)" };
 const tooltipStyle = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--popover-foreground)", fontSize: 12 };
 const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false };
+
+export function DailyExecutionVolumeChart({ data }: { data: DailyExecutionVolume[] }) {
+  if (!data.length) return <EmptyState>Sem execuções agendadas no período selecionado.</EmptyState>;
+  return (
+    <div>
+      <p className="mb-3 text-xs text-muted-foreground">Execuções agendadas; cada série usa seu próprio eixo. Dias sem dados de cenários aparecem sem coluna de cenários.</p>
+      <div className="h-80">
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+            <CartesianGrid stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tickFormatter={fmtDate} {...axis} minTickGap={24} />
+            <YAxis yAxisId="scenarios" {...axis} allowDecimals={false} width={45} />
+            <YAxis yAxisId="ci" orientation="right" {...axis} allowDecimals={false} width={45} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => fmtDate(String(value))} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar yAxisId="scenarios" dataKey="scenarioRuns" name="Execuções de cenários (eixo esquerdo)" fill="var(--chart-1)" isAnimationActive={false} />
+            <Bar yAxisId="ci" dataKey="ciRuns" name="Execuções do CI (eixo direito)" fill="var(--chart-3)" isAnimationActive={false} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 export function Gauge({ rate, label }: { rate: number | null; label: string }) {
   if (rate == null) return <EmptyState>Sem execuções no período selecionado.</EmptyState>;
