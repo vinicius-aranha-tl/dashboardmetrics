@@ -32,7 +32,7 @@ export function Panel({ title, info, children, className, action, pdfInfo }: { t
   );
 }
 
-export function StatCard({ label, value, hint, info, tone }: { label: string; value: ReactNode; hint?: string; info?: ReactNode; tone?: "success" | "warning" | "danger" | "product" | "automation" | undefined }) {
+export function StatCard({ label, value, hint, info, tone, prominent = false }: { label: string; value: ReactNode; hint?: string; info?: ReactNode; tone?: "success" | "warning" | "danger" | "product" | "automation" | undefined; prominent?: boolean }) {
   const toneCls = { success: "text-success", warning: "text-warning", danger: "text-danger", product: "text-product", automation: "text-automation" };
   return (
     <div className="quality-surface min-w-0 rounded-xl border border-border bg-card p-4 text-card-foreground sm:p-5">
@@ -40,7 +40,7 @@ export function StatCard({ label, value, hint, info, tone }: { label: string; va
         {label}
         {info && <InfoTip>{info}</InfoTip>}
       </div>
-      <div className={cn("mt-3 font-display text-3xl font-semibold", tone ? toneCls[tone] : "text-card-foreground")}>{value}</div>
+      <div className={cn("mt-3 font-display font-semibold", prominent ? "text-4xl sm:text-5xl" : "text-3xl", tone ? toneCls[tone] : "text-card-foreground")}>{value}</div>
       {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </div>
   );

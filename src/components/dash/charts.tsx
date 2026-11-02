@@ -35,7 +35,8 @@ export function Gauge({ rate, label }: { rate: number | null; label: string }) {
   const tone = rateTone(rate);
   const toneLabel = { success: "Saudável", warning: "Atenção", danger: "Crítico" }[tone];
   return (
-    <div className="relative h-48">
+    <div className="flex flex-col items-center justify-center gap-2 sm:flex-row sm:gap-6">
+      <div className="relative h-64 w-full max-w-[320px] shrink-0">
       <ResponsiveContainer>
         <PieChart>
           <Pie data={[{ v: rate }, { v: 100 - rate }]} dataKey="v" startAngle={200} endAngle={-20} innerRadius="78%" outerRadius="100%" cy="70%" stroke="none" isAnimationActive={false}>
@@ -45,9 +46,15 @@ export function Gauge({ rate, label }: { rate: number | null; label: string }) {
         </PieChart>
       </ResponsiveContainer>
       <div className="absolute inset-x-0 top-[58%] text-center">
-        <div className="font-mono text-3xl font-semibold" style={{ color: toneVar[tone] }}>{fmtPct(rate)}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{label} · {toneLabel}</div>
+        <div className="font-mono text-4xl font-semibold sm:text-5xl" style={{ color: toneVar[tone] }}>{fmtPct(rate)}</div>
+        <div className="mt-1 text-sm text-muted-foreground">{label} · {toneLabel}</div>
       </div>
+      </div>
+      <ul aria-label="Faixas da taxa de sucesso" className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground sm:flex-col sm:items-start sm:gap-3">
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-success" /> ≥ 90% · Saudável</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-warning" /> 80% a &lt; 90% · Atenção</li>
+        <li className="flex items-center gap-2"><span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-danger" /> &lt; 80% · Crítico</li>
+      </ul>
     </div>
   );
 }

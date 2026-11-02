@@ -97,10 +97,10 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
       const flakyCount = new Set(flaky.rows.map((r) => `${r.dataSource}|${r.title}`)).size;
       return (
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Testes" value={fmtInt(testCount(d.valid, product))} tone="product" />
-          <StatCard label="Execuções válidas" value={fmtInt(d.inPeriod.length)} hint="Reruns ignorados" />
-          <StatCard label="Falhas definitivas" value={fmtInt(s.failed)} tone={s.failed ? "danger" : "success"} />
-          <StatCard label="Flaky tests (30 dias)" value={flakyUnavailable ? "—" : fmtInt(flakyCount)} tone={flakyUnavailable ? undefined : flakyCount ? "warning" : "success"} />
+          <StatCard prominent label="Testes" value={fmtInt(testCount(d.valid, product))} tone="product" />
+          <StatCard prominent label="Execuções válidas" value={fmtInt(d.inPeriod.length)} hint="Reruns ignorados" />
+          <StatCard prominent label="Falhas definitivas" value={fmtInt(s.failed)} tone={s.failed ? "danger" : "success"} />
+          <StatCard prominent label="Flaky tests (30 dias)" value={flakyUnavailable ? "—" : fmtInt(flakyCount)} tone={flakyUnavailable ? undefined : flakyCount ? "warning" : "success"} />
         </div>
       );
     }
