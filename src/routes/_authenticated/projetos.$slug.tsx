@@ -4,26 +4,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, CheckCircle2, PlugZap, Save, Trash2, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { backend, projectInput, type ProjectRecord } from "@/lib/backend-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dashboard } from "@/components/dash/Dashboard";
-import { EmptyState, PageTitle, Panel } from "@/components/dash/primitives";
+import { EmptyState, Panel } from "@/components/dash/primitives";
 
 import { useAuth } from "@/hooks/useAuth";
 import { testRepo, type FileCheck } from "@/lib/sources.functions";
-import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/projetos/$slug")({
   validateSearch: (s: Record<string, unknown>): { tab?: "painel" | "fontes" } => (s["tab"] === "fontes" ? { tab: "fontes" } : {}),
   head: () => ({
     meta: [
-      { title: "Projeto — Dashboard Metrics for QA" },
+      { title: "Projeto — Quality Hub" },
       { name: "description", content: "Painéis de API e UI e fontes do GitHub do projeto." },
-      { property: "og:title", content: "Projeto — Dashboard Metrics for QA" },
+      { property: "og:title", content: "Projeto — Quality Hub" },
       { property: "og:description", content: "Painéis de API e UI e fontes do GitHub do projeto." },
     ],
   }),
@@ -33,40 +31,39 @@ export const Route = createFileRoute("/_authenticated/projetos/$slug")({
 function ProjectPage() {
   const { slug } = Route.useParams();
   const { tab = "painel" } = Route.useSearch();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate({ from: Route.fullPath });
   const q = useQuery({
     queryKey: ["project", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("slug", slug).maybeSingle();
-      if (error) throw error;
-      return data;
+      return backend.project(slug);
     },
   });
   if (q.isLoading) return null;
+  if (q.error) return <EmptyState><div className="grid justify-items-center gap-3"><span>Não foi possível carregar o projeto.</span><Button variant="outline" onClick={() => q.refetch()}>Tentar novamente</Button></div></EmptyState>;
   if (!q.data) return <EmptyState>Projeto não encontrado. <Link to="/projetos" className="ml-1 text-primary underline">Voltar</Link></EmptyState>;
   const p = q.data;
   return (
     <>
-      <Link to="/projetos" className="mb-3 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3 w-3" /> Projetos</Link>
-      <PageTitle title={p.name} subtitle={p.description} />
-      <Tabs value={tab} onValueChange={(v) => navigate({ search: v === "fontes" ? { tab: "fontes" } : {} })} className="mb-5">
-        <TabsList>
-          <TabsTrigger value="painel">Painéis</TabsTrigger>
-          <TabsTrigger value="fontes">Fontes do GitHub</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      {tab === "painel" ? <Dashboard projectId={p.id} slug={p.slug} name={p.name} /> : <SourcesForm project={p} />}
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">{p.name}</h1>
+          {p.description && <p className="mt-1 text-sm text-muted-foreground">{p.description}</p>}
+        </div>
+        {tab === "fontes" && isAdmin && <Button variant="outline" size="sm" onClick={() => navigate({ search: {} })}><ArrowLeft className="h-4 w-4" /> Voltar ao painel</Button>}
+      </div>
+      {tab === "fontes" && isAdmin ? <SourcesForm project={p} /> : <Dashboard projectId={p.id} slug={p.slug} name={p.name} onSources={isAdmin ? () => navigate({ search: { tab: "fontes" } }) : undefined} />}
     </>
   );
 }
 
 
-type Project = Tables<"projects">;
+type Project = ProjectRecord;
 type Prod = "api" | "ui";
 interface RepoForm { owner: string; name: string; branch: string }
 
 function SourcesForm({ project }: { project: Project }) {
-  const { isAdmin } = useAuth();
+  const { canEdit: isAdmin } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const test = useServerFn(testRepo);
@@ -88,12 +85,11 @@ function SourcesForm({ project }: { project: Project }) {
         if ((r.owner || r.name) && !(valid.test(r.owner.trim()) && valid.test(r.name.trim()))) throw new Error(`${pr.toUpperCase()}: informe organização e repositório válidos (sem espaços ou barras).`);
       }
       const v = (s: string) => s.trim() || null;
-      const { error } = await supabase.from("projects").update({
-        name: name.trim(), description: description.trim(), updated_at: new Date().toISOString(),
-        api_repo_owner: v(repos.api.owner), api_repo_name: v(repos.api.name), api_branch: repos.api.branch.trim() || "automation-metrics",
-        ui_repo_owner: v(repos.ui.owner), ui_repo_name: v(repos.ui.name), ui_branch: repos.ui.branch.trim() || "automation-metrics",
-      }).eq("id", project.id);
-      if (error) throw error;
+      await backend.updateProject(project.id, { ...projectInput(project),
+        name: name.trim(), description: description.trim(),
+        apiRepoOwner: v(repos.api.owner), apiRepoName: v(repos.api.name), apiBranch: repos.api.branch.trim() || "automation-metrics",
+        uiRepoOwner: v(repos.ui.owner), uiRepoName: v(repos.ui.name), uiBranch: repos.ui.branch.trim() || "automation-metrics",
+      });
     },
     onSuccess: () => {
       toast.success("Projeto salvo");
@@ -106,8 +102,7 @@ function SourcesForm({ project }: { project: Project }) {
 
   const del = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("projects").delete().eq("id", project.id);
-      if (error) throw error;
+      await backend.deleteProject(project.id);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["projects"] });
@@ -148,9 +143,9 @@ function SourcesForm({ project }: { project: Project }) {
       {(["api", "ui"] as const).map((pr) => {
         const res = results[pr];
         return (
-          <Panel key={pr} title={`Repositório de automação — ${pr.toUpperCase()}`} info="A plataforma lê os arquivos da pasta squaredup/ na branch de métricas, pelo servidor, com um token de leitura. Sem repositório, o painel mostra dados de demonstração identificados como tal.">
+          <Panel key={pr} title={`Repositório de automação — ${pr.toUpperCase()}`} info="A plataforma lê os arquivos da pasta squaredup/ na branch de métricas, pelo servidor, com um token de leitura. Se uma fonte não estiver configurada ou um arquivo não existir, o painel informa a indisponibilidade e não exibe dados de demonstração.">
             <div className="mb-3 flex items-center gap-2 text-xs">
-              <span className={configured(pr) ? "rounded bg-success/15 px-2 py-0.5 text-success" : "rounded bg-muted px-2 py-0.5 text-muted-foreground"}>{configured(pr) ? "Modo real (GitHub)" : "Modo demonstração"}</span>
+              <span className={configured(pr) ? "rounded bg-success/15 px-2 py-0.5 text-success" : "rounded bg-warning/15 px-2 py-0.5 text-warning"}>{configured(pr) ? "Modo real (GitHub)" : "Fonte não configurada"}</span>
             </div>
             <div className="grid gap-3 md:grid-cols-[1fr_1.4fr_1fr_auto] md:items-end">
               <div className="grid gap-2"><Label htmlFor={`${pr}-o`}>Organização / dono</Label><Input id={`${pr}-o`} disabled={!isAdmin} placeholder="minha-org" value={repos[pr].owner} onChange={(e) => setRepos((s) => ({ ...s, [pr]: { ...s[pr], owner: e.target.value } }))} /></div>

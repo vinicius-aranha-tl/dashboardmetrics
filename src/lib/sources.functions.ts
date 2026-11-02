@@ -1,13 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { mockEvolution, mockExecutions } from "@/data/mock";
+import { requireBackendAuth } from "@/lib/backend-auth";
+import { mapProject } from "@/lib/backend-client";
 import type { EvolutionPoint, Execution, Product } from "@/lib/metrics";
 import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, SQUAREDUP_FILES, STABILITY_FILE, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
 
 export type SourceKind = "executions" | "evolution";
 export interface SourceStatus {
-  mode: "github" | "demo" | "error";
+  mode: "github" | "unavailable" | "error";
   url: string | null;
   message?: string;
   records?: number;
@@ -46,15 +46,24 @@ export function contentsUrl(owner: string, repo: string, branch: string, file: s
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/squaredup/${file}?ref=${encodeURIComponent(branch)}`;
 }
 
-async function readSource<T>(url: string | null, normalize: (raw: unknown) => T, force: boolean, count: (d: T) => number = (d) => (d as unknown[]).length) {
-  if (!url) return { status: { mode: "demo", url: null } as SourceStatus, data: null };
+async function readSource<T>(url: string | null, normalize: (raw: unknown) => T, force: boolean, count: (d: T) => number = (d) => (d as unknown[]).length, missingIsUnavailable = false) {
+  if (!url) return { status: { mode: "unavailable", url: null, message: "Fonte não configurada." } as SourceStatus, data: null };
   try {
     const data = normalize(await fetchGithub(url, force));
     return { status: { mode: "github", url, records: count(data) } as SourceStatus, data };
   } catch (e) {
     const msg = e instanceof FormatError ? `Formato não reconhecido: ${e.message}` : (e as Error).message;
+    if (missingIsUnavailable && msg.startsWith("GitHub respondeu 404")) {
+      return { status: { mode: "unavailable", url, message: "Arquivo não encontrado ou repositório sem acesso (404)." } as SourceStatus, data: null };
+    }
     return { status: { mode: "error", url, message: msg } as SourceStatus, data: null };
   }
+}
+
+function requireScheduledScope(raw: unknown): unknown {
+  const scope = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>)["scope"] : undefined;
+  if (typeof scope !== "string" || !["scheduled-main", "lifetime-scheduled-main"].includes(scope)) throw new FormatError("O arquivo não comprova que contém apenas execuções agendadas.");
+  return raw;
 }
 
 export interface ProjectData {
@@ -62,27 +71,43 @@ export interface ProjectData {
   sources: Record<Product, Record<SourceKind, SourceStatus>>;
   executions: Execution[];
   evolution: Record<Product, EvolutionPoint[]>;
-  /** Specialized files; null data = not available (demo, missing or error) → widgets fall back to history.json. */
+/** Specialized files; null data = unavailable or failed → widgets fall back to history.json. */
   special: Record<Product, {
     stability: { status: SourceStatus; file: string; data: StabilityRow[] | null };
     reasons: { status: SourceStatus; file: string; data: { failures: SpecialFailureRow[]; reasons: ReasonRow[] } | null };
     lifecycle: { status: SourceStatus; file: string; data: SpecialFailureRow[] | null };
   }>;
   fetchedAt: string;
+  sourceFingerprint?: string;
+  refreshError?: string;
 }
 
-/** Loads dashboard data for one project (by slug) or all projects. Missing config → demo data; failure → error, never silent mock. */
+/** Loads dashboard data for one project (by slug) or all projects. Never substitutes demonstration data for a real source. */
 export const loadDashboardData = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ slug: z.string().nullable(), force: z.boolean().optional() }).parse(d))
+  .middleware([requireBackendAuth])
+  .validator((d: unknown) => z.object({ slug: z.string().nullable(), force: z.boolean().optional() }).parse(d))
   .handler(async ({ data, context }) => {
     const force = Boolean(data.force);
-    let q = context.supabase.from("projects").select("*").order("name");
-    if (data.slug) q = q.eq("slug", data.slug);
-    const { data: projects, error } = await q;
-    if (error) throw new Error(error.message);
+    const backendUrl = process.env["BACKEND_URL"] ?? "http://127.0.0.1:5080";
+    const response = await fetch(`${backendUrl}/api/v1/projects`, { headers: { cookie: context.backendCookie } });
+    if (!response.ok) throw new Error("Não foi possível carregar os projetos.");
+    const projects = (await response.json() as Parameters<typeof mapProject>[0][]).map(mapProject).filter(p => !data.slug || p.slug === data.slug);
     const out: ProjectData[] = [];
     for (const p of projects ?? []) {
+      const sourceKey = JSON.stringify([p.api_repo_owner, p.api_repo_name, p.api_branch, p.ui_repo_owner, p.ui_repo_name, p.ui_branch, p.api_executions_url, p.api_evolution_url, p.ui_executions_url, p.ui_evolution_url]);
+      const fingerprint = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sourceKey)))].map(byte => byte.toString(16).padStart(2, "0")).join("");
+      const snapshotUrl = `${backendUrl}/api/v1/metric-snapshots/${encodeURIComponent(p.id)}`;
+      const snapshotResponse = await fetch(snapshotUrl, { headers: { cookie: context.backendCookie } });
+      if (!snapshotResponse.ok && snapshotResponse.status !== 404) throw new Error("Não foi possível consultar as métricas no MongoDB.");
+      const saved = snapshotResponse.ok ? await snapshotResponse.json() as ProjectData : null;
+      const cached = saved?.sourceFingerprint === fingerprint ? { ...saved, project: { id: p.id, name: p.name, slug: p.slug } } : null;
+      const fresh = cached && Date.now() - Date.parse(cached.fetchedAt) < TTL;
+      if (context.backendRole !== "admin") {
+        if (!cached) throw new Error(`As métricas de ${p.name} ainda não foram sincronizadas. Peça a um administrador para atualizar os dados.`);
+        out.push(cached);
+        continue;
+      }
+      if (!force && fresh) { out.push(cached); continue; }
       const repo = {
         api: p.api_repo_owner && p.api_repo_name ? { owner: p.api_repo_owner, name: p.api_repo_name, branch: p.api_branch } : null,
         ui: p.ui_repo_owner && p.ui_repo_name ? { owner: p.ui_repo_owner, name: p.ui_repo_name, branch: p.ui_branch } : null,
@@ -99,23 +124,21 @@ export const loadDashboardData = createServerFn({ method: "POST" })
         const r = repo[product];
         const evoFile = EVOLUTION_FILE[product];
         const exUrl = r ? contentsUrl(r.owner, r.name, r.branch, EXECUTIONS_FILE) : legacy[product].executions;
-        const evUrl = r ? (evoFile ? contentsUrl(r.owner, r.name, r.branch, evoFile) : null) : legacy[product].evolution;
+        const evUrl = r ? contentsUrl(r.owner, r.name, r.branch, evoFile) : legacy[product].evolution;
         const [ex, ev] = await Promise.all([
           readSource(exUrl, (raw) => normalizeExecutions(raw, product), force),
-          readSource(evUrl, normalizeEvolution, force),
+          readSource(evUrl, normalizeEvolution, force, undefined, true),
         ]);
         sources[product] = { executions: ex.status, evolution: ev.status };
-        const exData = ex.status.mode === "demo"
-          ? mockExecutions(p, product)
-          : (ex.data ?? []).map((e) => ({ ...e, product, triggerId: `${p.id}-${e.triggerId}`, dataSource: `${p.name} · ${product.toUpperCase()}` }));
+        const exData = (ex.data ?? []).map((e) => ({ ...e, product, triggerId: `${p.id}-${e.triggerId}`, dataSource: `${p.name} · ${product.toUpperCase()}` }));
         executions.push(...exData);
-        evolution[product] = ev.status.mode === "demo" ? mockEvolution(p, product) : (ev.data ?? []);
+        evolution[product] = ev.data ?? [];
         const ds = `${p.name} · ${product.toUpperCase()}`;
         const u = (f: string) => (r ? contentsUrl(r.owner, r.name, r.branch, f) : null);
         const [st, rs, lc] = await Promise.all([
           readSource(u(STABILITY_FILE), (raw) => normalizeStability(raw, ds), force),
-          readSource(u(REASONS_FILE), (raw) => normalizeReasons(raw, ds), force, (d) => d.failures.length),
-          readSource(u(LIFECYCLE_FILE), (raw) => normalizeLifecycle(raw, ds), force),
+          readSource(u(REASONS_FILE), (raw) => normalizeReasons(requireScheduledScope(raw), ds), force, (d) => d.failures.length),
+          readSource(u(LIFECYCLE_FILE), (raw) => normalizeLifecycle(requireScheduledScope(raw), ds), force),
         ]);
         special[product] = {
           stability: { ...st, file: STABILITY_FILE },
@@ -123,13 +146,17 @@ export const loadDashboardData = createServerFn({ method: "POST" })
           lifecycle: { ...lc, file: LIFECYCLE_FILE },
         };
       }
-      const errors = (["api", "ui"] as const).flatMap((pr) => (["executions", "evolution"] as const).filter((k) => sources[pr][k].mode === "error").map((k) => `${pr.toUpperCase()} ${k}: ${sources[pr][k].message}`));
-      const anyReal = (["api", "ui"] as const).some((pr) => sources[pr].executions.mode !== "demo" || sources[pr].evolution.mode !== "demo");
-      if (anyReal) {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        await supabaseAdmin.from("projects").update({ last_synced_at: new Date().toISOString(), last_sync_error: errors.join(" | ") || null }).eq("id", p.id);
+      const failed = (["api", "ui"] as const).some(product => sources[product].executions.mode === "error" || sources[product].evolution.mode === "error");
+      if (failed) {
+        if (cached) { out.push({ ...cached, refreshError: "Não foi possível atualizar todos os dados no GitHub. Exibindo a última sincronização salva." }); continue; }
+        throw new Error(`Não foi possível sincronizar as métricas de ${p.name} no GitHub.`);
       }
-      out.push({ project: { id: p.id, name: p.name, slug: p.slug }, sources, executions, evolution, special, fetchedAt: new Date().toISOString() });
+      const dataset: ProjectData = { project: { id: p.id, name: p.name, slug: p.slug }, sources, executions, evolution, special, fetchedAt: new Date().toISOString(), sourceFingerprint: fingerprint };
+      const persisted = await fetch(snapshotUrl, { method: "PUT", headers: { cookie: context.backendCookie, "Content-Type": "application/json" }, body: JSON.stringify(dataset) });
+      if (!persisted.ok) throw new Error(`Não foi possível salvar as métricas de ${p.name} no MongoDB.`);
+      const stored = await fetch(snapshotUrl, { headers: { cookie: context.backendCookie } });
+      if (!stored.ok) throw new Error(`Não foi possível ler as métricas salvas de ${p.name}.`);
+      out.push(await stored.json() as ProjectData);
     }
     return out;
   });
@@ -138,11 +165,12 @@ export interface FileCheck { file: string; ok: boolean; records: number | null; 
 
 /** Lists every file in squaredup/ and reads each one, reporting status, records and updatedAt. */
 export const testRepo = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({
+  .middleware([requireBackendAuth])
+  .validator((d: unknown) => z.object({
     owner: z.string().regex(nameRe), repo: z.string().regex(nameRe), branch: z.string().min(1).max(100).regex(/^[A-Za-z0-9_./-]+$/), product: z.enum(["api", "ui"]),
   }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    if (context.backendRole !== "admin") throw new Error("Acesso restrito a administradores.");
     const tokenConfigured = Boolean(process.env["GITHUB_TOKEN"]);
     const dirUrl = `https://api.github.com/repos/${encodeURIComponent(data.owner)}/${encodeURIComponent(data.repo)}/contents/squaredup?ref=${encodeURIComponent(data.branch)}`;
     let names: string[];

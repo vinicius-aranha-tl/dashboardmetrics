@@ -1,7 +1,7 @@
 // Pure business rules for automation metrics. Keep free of React/IO so they are testable.
 
 export type Product = "api" | "ui";
-export type Trigger = "scheduled" | "post-merge" | "manual";
+export type Trigger = "scheduled" | "post-merge" | "manual" | "unknown";
 export type TestStatus = "passed" | "failed" | "flaky";
 
 export interface TestResult {
@@ -31,6 +31,7 @@ export interface EvolutionPoint {
   productConditions: number;
   automatedConditions: number;
   projectedAutomatedConditions: number | null;
+  projectedProductConditions?: number | null;
 }
 
 export interface DailyResult {
@@ -134,15 +135,21 @@ export interface FlakyRow {
 
 export function flakyTable(execs: Execution[]): FlakyRow[] {
   const m = new Map<string, FlakyRow>();
-  for (const e of execs)
+  for (const e of execs) {
+    const oneRun = new Map<string, { title: string; failed: boolean }>();
     for (const r of e.results) {
       const key = `${e.dataSource}|${r.title}`;
-      const row = m.get(key) ?? { title: r.title, executions: 0, failureExecutions: 0, dataSource: e.dataSource };
+      const current = oneRun.get(key);
+      oneRun.set(key, { title: r.title, failed: Boolean(current?.failed || r.status === "flaky" || r.status === "failed") });
+    }
+    for (const [key, test] of oneRun) {
+      const row = m.get(key) ?? { title: test.title, executions: 0, failureExecutions: 0, dataSource: e.dataSource };
       row.executions++;
-      if (r.status === "flaky") row.failureExecutions++;
+      if (test.failed) row.failureExecutions++;
       m.set(key, row);
     }
-  return [...m.values()].filter((r) => r.failureExecutions > 0).sort((a, b) => b.failureExecutions - a.failureExecutions);
+  }
+  return [...m.values()].filter((r) => r.failureExecutions >= 3).sort((a, b) => b.failureExecutions - a.failureExecutions);
 }
 
 export interface FailureRow {
@@ -157,7 +164,21 @@ export interface FailureRow {
   lastOccurrence: string;
 }
 
-/** Groups definitive failures by test + error. Each valid execution counts once. */
+/** Une registros equivalentes sem misturar origens ou motivos diferentes. */
+export function groupFailureOccurrences<T extends { title: string; error: string; detail: string; dataSource: string; occurrences: number; firstSeen: string; firstOccurrence: string; lastOccurrence: string }>(rows: T[]): T[] {
+  const groups = new Map<string, T>();
+  const earlier = (a: string, b: string) => !a ? b : !b ? a : a < b ? a : b;
+  const later = (a: string, b: string) => !a ? b : !b ? a : a > b ? a : b;
+  for (const row of rows) {
+    const key = JSON.stringify([row.dataSource, row.title, row.error, row.detail]);
+    const previous = groups.get(key);
+    if (!previous) groups.set(key, { ...row });
+    else groups.set(key, { ...previous, occurrences: previous.occurrences + row.occurrences, firstSeen: earlier(previous.firstSeen, row.firstSeen), firstOccurrence: earlier(previous.firstOccurrence, row.firstOccurrence), lastOccurrence: later(previous.lastOccurrence, row.lastOccurrence) });
+  }
+  return [...groups.values()].sort((a, b) => b.occurrences - a.occurrences);
+}
+
+/** Groups definitive failures by source, scenario, error and detail. Each execution counts once. */
 export function failureRows(execs: Execution[]): FailureRow[] {
   const firstSeen = new Map<string, string>();
   for (const e of execs)
@@ -171,7 +192,7 @@ export function failureRows(execs: Execution[]): FailureRow[] {
     const seenInExec = new Set<string>();
     for (const r of e.results) {
       if (r.status !== "failed") continue;
-      const key = `${e.dataSource}|${r.title}|${r.error ?? ""}`;
+      const key = JSON.stringify([e.dataSource, r.title, r.error ?? "", r.detail ?? ""]);
       if (seenInExec.has(key)) continue;
       seenInExec.add(key);
       const row =
@@ -216,15 +237,15 @@ export function countCoveredConditions(
 
 export const MIN_POINTS_FOR_PROJECTION = 3;
 
-function slope(ys: number[]): number {
+function slope(ys: number[], weeks: number[]): number {
   const n = ys.length;
-  const mx = (n - 1) / 2;
+  const mx = weeks.reduce((sum, x) => sum + x, 0) / n;
   const my = ys.reduce((a, b) => a + b, 0) / n;
   let num = 0,
     den = 0;
   ys.forEach((y, i) => {
-    num += (i - mx) * (y - my);
-    den += (i - mx) ** 2;
+    num += (weeks[i]! - mx) * (y - my);
+    den += (weeks[i]! - mx) ** 2;
   });
   return den ? num / den : 0;
 }
@@ -239,6 +260,7 @@ export type Projection =
   | { status: "empty"; series: EvolutionPoint[] }
   | { status: "insufficient"; series: EvolutionPoint[]; currentGap: number }
   | { status: "no-parity"; series: EvolutionPoint[]; currentGap: number; productVelocity: number; automationVelocity: number }
+  | { status: "beyond-horizon"; series: EvolutionPoint[]; currentGap: number; weeksRemaining: number }
   | {
       status: "parity";
       series: EvolutionPoint[];
@@ -255,23 +277,28 @@ export function computeProjection(points: EvolutionPoint[]): Projection {
   if (!pts.length) return { status: "empty", series: [] };
   const last = pts[pts.length - 1]!;
   const currentGap = last.productConditions - last.automatedConditions;
-  if (pts.length < MIN_POINTS_FOR_PROJECTION) return { status: "insufficient", series: pts.slice(-1), currentGap };
+  if (pts.length < MIN_POINTS_FOR_PROJECTION) return { status: "insufficient", series: pts, currentGap };
   const window = pts.slice(-8);
-  const vp = slope(window.map((p) => p.productConditions));
-  const va = slope(window.map((p) => p.automatedConditions));
+  const firstWeek = Date.parse(`${window[0]!.week}T00:00:00Z`);
+  const weeks = window.map((p) => (Date.parse(`${p.week}T00:00:00Z`) - firstWeek) / (7 * 86_400_000));
+  if (new Set(weeks).size < MIN_POINTS_FOR_PROJECTION || weeks.some((w) => !Number.isFinite(w))) return { status: "insufficient", series: pts, currentGap };
+  const vp = slope(window.map((p) => p.productConditions), weeks);
+  const va = slope(window.map((p) => p.automatedConditions), weeks);
   if (va <= vp || currentGap <= 0) {
     return { status: "no-parity", series: pts, currentGap, productVelocity: vp, automationVelocity: va };
   }
   const weeksRemaining = Math.ceil(currentGap / (va - vp));
+  if (!Number.isFinite(weeksRemaining) || weeksRemaining > 520) return { status: "beyond-horizon", series: pts, currentGap, weeksRemaining };
   const series: EvolutionPoint[] = pts.map((p, i) =>
-    i === pts.length - 1 ? { ...p, projectedAutomatedConditions: p.automatedConditions } : p,
+    i === pts.length - 1 ? { ...p, projectedAutomatedConditions: p.automatedConditions, projectedProductConditions: p.productConditions } : p,
   );
   for (let k = 1; k <= weeksRemaining; k++) {
     series.push({
       week: addWeeks(last.week, k),
       productConditions: null as unknown as number,
       automatedConditions: null as unknown as number,
-      projectedAutomatedConditions: Math.round(Math.min(last.automatedConditions + va * k, last.productConditions + vp * k)),
+      projectedAutomatedConditions: Math.round(last.automatedConditions + va * k),
+      projectedProductConditions: Math.round(last.productConditions + vp * k),
     });
   }
   return {

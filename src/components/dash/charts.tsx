@@ -50,62 +50,95 @@ export function DailyChart({ data }: { data: DailyResult[] }) {
 }
 
 const DONUT = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
-export function CauseDonut({ data }: { data: { cause: string; value: number }[] }) {
+export function CauseBars({ data }: { data: { cause: string; value: number }[] }) {
   if (!data.length) return <EmptyState>Nenhuma falha definitiva no período.</EmptyState>;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  const total = sorted.reduce((sum, item) => sum + item.value, 0);
+  const color = (percentage: number) => percentage >= 50 ? "#ef5964" : percentage >= 25 ? "#ffa64d" : percentage >= 10 ? "#efc45b" : "#65b7ee";
   return (
-    <div className="h-64">
+    <div>
+      <p className="mb-4 text-xs text-muted-foreground">Quantidade de ocorrências e participação no total de falhas definitivas.</p>
+      <ul data-pdf-bars aria-label="Falhas por causa, em ordem decrescente de ocorrências" className="grid max-h-[28rem] gap-5 overflow-y-auto pr-2">
+        {sorted.map((item, index) => {
+          const percentage = total > 0 ? item.value / total * 100 : 0;
+          const label = `${percentage.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+          return (
+            <li key={`${item.cause}-${index}`} data-pdf-label={item.cause} data-pdf-value={item.value} className="min-w-0">
+              <div className="mb-1.5 break-words text-sm text-card-foreground">{item.cause}</div>
+              <div className="flex items-center gap-2">
+                <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums" aria-label={`${fmtInt(item.value)} ocorrências`}>{fmtInt(item.value)}</span>
+                <div className="min-w-0 flex-1 pr-14">
+                  <div className="relative h-8 border-l border-border">
+                    <div className="h-full" style={{ width: `${percentage}%`, backgroundColor: color(percentage) }} />
+                    <span className="absolute top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap text-sm font-semibold tabular-nums" style={{ left: `${percentage}%` }}>{label}</span>
+                  </div>
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div aria-hidden="true" className="ml-12 mr-16 mt-3 flex justify-between border-t border-border pt-1 text-[10px] text-muted-foreground"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
+      <p className="mt-3 text-xs text-muted-foreground">Cores indicam frequência relativa, não gravidade do erro.</p>
+    </div>
+  );
+}
+export function CauseDonut({ data, showTotal = false }: { data: { cause: string; value: number }[]; showTotal?: boolean }) {
+  if (!data.length) return showTotal ? <div className="flex h-64 w-full flex-col items-center justify-center"><span className="text-4xl font-semibold">0</span><span className="mt-2 text-xs text-muted-foreground">falhas definitivas</span></div> : <EmptyState>Nenhuma falha definitiva no período.</EmptyState>;
+  return (
+    <div className={`relative h-64 w-full ${showTotal ? "mx-auto max-w-[280px]" : ""}`}>
       <ResponsiveContainer>
         <PieChart>
           <Pie data={data} dataKey="value" nameKey="cause" innerRadius="55%" outerRadius="85%" stroke="var(--card)" strokeWidth={2}>
             {data.map((_, i) => <Cell key={i} fill={DONUT[i % DONUT.length]} />)}
           </Pie>
           <Tooltip contentStyle={tooltipStyle} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {!showTotal && <Legend wrapperStyle={{ fontSize: 12 }} />}
         </PieChart>
       </ResponsiveContainer>
+      {showTotal && <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"><span className="text-4xl font-semibold">{fmtInt(data.reduce((total, item) => total + item.value, 0))}</span><span className="text-xs text-muted-foreground">falhas definitivas</span></div>}
     </div>
   );
 }
 
-function EvoTooltip({ active, payload }: { active?: boolean; payload?: { payload: { week: string; productConditions: number | null; automatedConditions: number | null; projectedAutomatedConditions: number | null } }[] }) {
+function EvoTooltip({ active, payload, hideAutomation = false }: { active?: boolean; hideAutomation?: boolean; payload?: { payload: { week: string; productConditions: number | null; automatedConditions: number | null; projectedAutomatedConditions: number | null; projectedProductConditions?: number | null } }[] }) {
   if (!active || !payload?.length) return null;
   const p = payload[0]!.payload;
   const auto = p.automatedConditions ?? p.projectedAutomatedConditions;
-  const projected = p.automatedConditions == null;
+  const projected = p.automatedConditions == null && p.projectedAutomatedConditions != null;
   return (
     <div style={tooltipStyle} className="p-3">
       <div className="mb-1 font-semibold">Semana de {fmtDate(p.week)}{projected && " (projeção)"}</div>
       {p.productConditions != null ? (
         <>
-          <div>Produto: <b>{fmtInt(p.productConditions)}</b></div>
-          <div>Automação: <b>{fmtInt(auto ?? 0)}</b></div>
-          <div>Diferença: <b>{fmtInt(p.productConditions - (auto ?? 0))}</b></div>
-          <div>Cobertura: <b>{fmtPct(((auto ?? 0) / p.productConditions) * 100)}</b></div>
+          <div>{hideAutomation ? "Inventário preliminar" : "Cenários planejados"}: <b>{fmtInt(p.productConditions)}</b></div>
+          {!hideAutomation && <><div>Cenários automatizados: <b>{fmtInt(auto ?? 0)}</b></div><div>Diferença: <b>{fmtInt(p.productConditions - (auto ?? 0))}</b></div><div>Cobertura: <b>{p.productConditions ? fmtPct(((auto ?? 0) / p.productConditions) * 100) : "—"}</b></div></>}
         </>
       ) : (
-        <div>Automação projetada: <b>{fmtInt(auto ?? 0)}</b></div>
+        <><div>Produto projetado: <b>{p.projectedProductConditions == null ? "—" : fmtInt(p.projectedProductConditions)}</b></div><div>Automação projetada: <b>{auto == null ? "—" : fmtInt(auto)}</b></div></>
       )}
     </div>
   );
 }
 
-export function EvolutionChart({ projection }: { projection: Projection }) {
+export function EvolutionChart({ projection, hideAutomation = false }: { projection: Projection; hideAutomation?: boolean }) {
   if (projection.status === "empty") return <EmptyState>Sem dados de evolução para esta fonte.</EmptyState>;
-  const parityWeek = projection.status === "parity" ? projection.parityWeek : null;
+  const parityWeek = !hideAutomation && projection.status === "parity" ? projection.parityWeek : null;
   return (
-    <div className="h-72">
+    <div className="h-80">
       <ResponsiveContainer>
-        <LineChart data={projection.series}>
+        <LineChart data={projection.series} margin={{ top: 8, right: 8, bottom: 28, left: 8 }}>
           <CartesianGrid stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="week" tickFormatter={fmtDate} {...axis} minTickGap={20} />
-          <YAxis {...axis} />
-          <Tooltip content={<EvoTooltip />} />
-          <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Line type="monotone" dataKey="productConditions" name="Condições do produto" stroke="var(--product)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
-          <Line type="monotone" dataKey="automatedConditions" name="Condições automatizadas" stroke="var(--automation)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
-          {projection.status === "parity" && (
-            <Line type="monotone" dataKey="projectedAutomatedConditions" name="Projeção da automação" stroke="var(--projection)" strokeWidth={2} strokeDasharray="6 5" dot={false} />
+          <XAxis dataKey="week" tickFormatter={fmtDate} {...axis} minTickGap={20} label={{ value: "Semana", position: "insideBottom", offset: -14, fill: "var(--muted-foreground)", fontSize: 11 }} />
+          <YAxis {...axis} width={52} label={{ value: "Condições", angle: -90, position: "insideLeft", fill: "var(--muted-foreground)", fontSize: 11 }} />
+          <Tooltip content={<EvoTooltip hideAutomation={hideAutomation} />} />
+          <Legend verticalAlign="top" wrapperStyle={{ fontSize: 12, paddingBottom: 12 }} />
+          <Line type="monotone" dataKey="productConditions" name={hideAutomation ? "Inventário preliminar" : "Cenários planejados"} stroke="var(--product)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />
+          {!hideAutomation && <Line type="monotone" dataKey="automatedConditions" name="Cenários automatizados" stroke="var(--automation)" strokeWidth={2.5} dot={{ r: 3 }} connectNulls={false} />}
+          {!hideAutomation && projection.status === "parity" && (
+            <Line type="monotone" dataKey="projectedAutomatedConditions" name="Tendência de automação" stroke="var(--projection)" strokeWidth={2} strokeDasharray="6 5" dot={false} />
           )}
+          {!hideAutomation && projection.status === "parity" && <Line type="monotone" dataKey="projectedProductConditions" name="Tendência do produto" stroke="var(--product)" strokeWidth={2} strokeDasharray="6 5" dot={false} />}
           {parityWeek && <ReferenceLine x={parityWeek} stroke="var(--projection)" strokeDasharray="3 3" label={{ value: "Paridade", fill: "var(--projection)", fontSize: 11, position: "insideTopRight" }} />}
         </LineChart>
       </ResponsiveContainer>
@@ -165,7 +198,7 @@ export function RateBands({ data }: { data: { date: string; rate: number }[] }) 
           <XAxis dataKey="date" tickFormatter={fmtDate} {...axis} minTickGap={24} />
           <YAxis domain={[0, 100]} {...axis} unit="%" />
           <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => fmtDate(String(l))} formatter={(v) => fmtPct(Number(v))} />
-          <Line type="monotone" dataKey="rate" name="Taxa de sucesso" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 2 }} isAnimationActive={false} />
+          <Line type="monotone" dataKey="rate" name="Taxa de sucesso" stroke="var(--success)" strokeWidth={2.5} dot={{ r: 2 }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -204,7 +237,7 @@ export function OriginRadar({ data }: { data: { label: string; rate: number }[] 
           <PolarAngleAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 11 }} />
           <PolarRadiusAxis domain={[0, 100]} tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} axisLine={false} />
           <Tooltip contentStyle={tooltipStyle} formatter={(v) => fmtPct(Number(v))} />
-          <Radar dataKey="rate" name="Taxa de sucesso" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.3} isAnimationActive={false} />
+          <Radar dataKey="rate" name="Taxa de sucesso" stroke="var(--success)" fill="var(--success)" fillOpacity={0.3} isAnimationActive={false} />
         </RadarChart>
       </ResponsiveContainer>
     </div>

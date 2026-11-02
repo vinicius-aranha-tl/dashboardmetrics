@@ -14,6 +14,10 @@ describe("normalizeExecutions", () => {
     expect(out[0]).toMatchObject({ id: "9", runAttempt: 2, trigger: "manual", date: "2026-10-30", product: "api" });
     expect(out[0]!.results[0]!.status).toBe("flaky");
   });
+  it("não classifica execuções com origem ausente como agendadas", () => {
+    const [out] = normalizeExecutions([{ date: "2026-10-30", results: [{ title: "x", status: "passed" }] }], "api");
+    expect(out?.trigger).toBe("unknown");
+  });
   it("rejects unknown status naming the field", () => {
     expect(() => normalizeExecutions([{ date: "2026-10-30", results: [{ title: "x", status: "weird" }] }], "ui")).toThrow(/results\[0\]\.status/);
   });
@@ -61,6 +65,16 @@ describe("specialized files", () => {
     expect(r.map((x) => x.title)).toEqual(["b", "a"]);
     expect(r[0]?.dataSource).toBe("PM API");
     expect(r[1]?.firstSeen).toBe("2026-01-01");
+  });
+  it("agrupa somente cenário, erro e detalhe iguais e preserva as datas extremas", () => {
+    const base = { title: "cenário", error: "erro", detail: "motivo", occurrences: 1 };
+    const r = normalizeLifecycle({ failures: [
+      { ...base, firstOccurrence: "2026-10-12", lastOccurrence: "2026-10-12", firstSeen: "2026-10-10" },
+      { ...base, firstOccurrence: "2026-10-20", lastOccurrence: "2026-10-20", firstSeen: "2026-10-08" },
+      { ...base, detail: "outro motivo" },
+    ] }, "API");
+    expect(r).toHaveLength(2);
+    expect(r[0]).toMatchObject({ occurrences: 2, firstSeen: "2026-10-08", firstOccurrence: "2026-10-12", lastOccurrence: "2026-10-20" });
   });
   it("missing failures list is a format error", () => {
     expect(() => normalizeLifecycle({ tests: [] }, "x")).toThrow();

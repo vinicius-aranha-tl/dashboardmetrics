@@ -4,6 +4,8 @@ import {
   countCoveredConditions,
   dedupeExecutions,
   failureRows,
+  filterExecutions,
+  flakyTable,
   rateTone,
   summarize,
   type EvolutionPoint,
@@ -12,6 +14,11 @@ import {
 
 const ex = (o: Partial<Execution>): Execution => ({
   id: "x", product: "api", triggerId: "t1", runAttempt: 1, trigger: "scheduled", date: "2026-10-01", dataSource: "ds", results: [], ...o,
+});
+
+it("filtra 15 dias incluindo hoje e os 14 dias anteriores", () => {
+  const rows = [ex({ id: "dentro", date: "2026-10-17" }), ex({ id: "fora", date: "2026-10-16" }), ex({ id: "hoje", date: "2026-10-31" })];
+  expect(filterExecutions(rows, { product: "api", origins: ["scheduled"], periodDays: 15, now: new Date("2026-10-31T12:00:00Z") }).map(row => row.id)).toEqual(["dentro", "hoje"]);
 });
 
 describe("success rate", () => {
@@ -41,6 +48,15 @@ describe("dedup", () => {
     const rows = failureRows([ex({ results: [{ title: "a", status: "failed", error: "E" }, { title: "a", status: "failed", error: "E" }] })]);
     expect(rows[0]?.occurrences).toBe(1);
   });
+  it("separa falhas do mesmo cenário e erro quando os detalhes são diferentes", () => {
+    const rows = failureRows([ex({ results: [{ title: "a", status: "failed", error: "E", detail: "motivo 1" }, { title: "a", status: "failed", error: "E", detail: "motivo 2" }] })]);
+    expect(rows).toHaveLength(2);
+  });
+});
+
+it("classifica como instável somente a partir de três execuções com falha", () => {
+  const executions = [1, 2, 3].map(i => ex({ id: String(i), triggerId: String(i), results: [{ title: "instável", status: i === 3 ? "failed" : "flaky" }, { title: "com duas falhas", status: i === 3 ? "passed" : "flaky" }] }));
+  expect(flakyTable(executions)).toEqual([{ title: "instável", executions: 3, failureExecutions: 3, dataSource: "ds" }]);
 });
 
 describe("coverage", () => {
@@ -56,6 +72,24 @@ const pts = (p: number[], a: number[]): EvolutionPoint[] =>
 describe("projection", () => {
   it("insufficient history with fewer than 3 weeks", () => {
     expect(computeProjection(pts([10, 11], [1, 2])).status).toBe("insufficient");
+  });
+  it("preserva os pontos existentes e calcula velocidade pelo tempo entre as datas", () => {
+    const two = computeProjection(pts([10, 11], [1, 2]));
+    expect(two.series).toHaveLength(2);
+    const points = [{ week: "2026-10-01", productConditions: 100, automatedConditions: 10, projectedAutomatedConditions: null }, { week: "2026-10-08", productConditions: 102, automatedConditions: 20, projectedAutomatedConditions: null }, { week: "2026-10-22", productConditions: 106, automatedConditions: 40, projectedAutomatedConditions: null }];
+    const result = computeProjection(points);
+    expect(result.status).toBe("parity");
+    if (result.status === "parity") { expect(result.productVelocity).toBeCloseTo(2); expect(result.automationVelocity).toBeCloseTo(10); }
+  });
+  it("projeta produto e automação e limita previsões excessivamente longas", () => {
+    const result = computeProjection(pts([100, 101, 102], [10, 20, 30]));
+    expect(result.status).toBe("parity");
+    if (result.status === "parity") {
+      const future = result.series.at(-1)!;
+      expect(future.projectedProductConditions).toBeGreaterThan(102);
+      expect(future.projectedAutomatedConditions).toBeGreaterThan(30);
+    }
+    expect(computeProjection(pts([10000, 10000, 10000], [1, 2, 3])).status).toBe("beyond-horizon");
   });
   it("no parity when automation grows slower or equal", () => {
     expect(computeProjection(pts([10, 12, 14], [1, 3, 5])).status).toBe("no-parity");

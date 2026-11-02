@@ -1,20 +1,19 @@
 import { useState, type FormEvent } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { Gauge, Lock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
+import { backend } from "@/lib/backend-client";
+import { BrandLogo } from "@/components/dash/BrandLogo";
+import { LoginArtwork } from "@/components/dash/LoginArtwork";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { bootstrapAdmin, needsBootstrap } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Entrar — Dashboard Metrics for QA" },
+      { title: "Entrar — Quality Hub" },
       { name: "description", content: "Acesso restrito às métricas de automação de QA." },
-      { property: "og:title", content: "Entrar — Dashboard Metrics for QA" },
+      { property: "og:title", content: "Entrar — Quality Hub" },
       { property: "og:description", content: "Acesso restrito às métricas de automação de QA." },
     ],
   }),
@@ -23,12 +22,9 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const check = useServerFn(needsBootstrap);
-  const boot = useServerFn(bootstrapAdmin);
-  const bq = useQuery({ queryKey: ["needs-bootstrap"], queryFn: () => check() });
-  const firstAdmin = bq.data?.needed === true;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,40 +33,35 @@ function AuthPage() {
     setError(null);
     setBusy(true);
     try {
-      if (firstAdmin) await boot({ data: { email, password } });
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw new Error(error.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : error.message);
+      const user = await backend.login(email, password);
+      if (user.role === "admin") await backend.setup();
       navigate({ to: "/visao-geral", replace: true });
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      setError(message.includes("(401)") ? "E-mail ou senha incorretos." : message);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Gauge className="h-6 w-6" /></div>
-          <div>
-            <h1 className="text-lg font-semibold">Dashboard Metrics for QA</h1>
-            <p className="text-xs text-muted-foreground">Métricas de automação API e UI</p>
-          </div>
+    <main className="flex min-h-screen items-center bg-background px-5 py-10 sm:px-8">
+      <div className="mx-auto grid w-full max-w-[1200px] items-center gap-10 lg:grid-cols-[1.12fr_0.88fr] lg:gap-14">
+        <div className="min-w-0">
+          <BrandLogo className="-ml-3 w-[min(100%,440px)]" />
+          <p className="-mt-1 pl-2 text-sm text-muted-foreground sm:text-base">Monitoramento de qualidade</p>
+          <div className="mt-8 hidden lg:block"><LoginArtwork /></div>
+          <div className="mt-5 hidden items-center gap-2 pl-1 text-xs text-muted-foreground lg:flex"><LockKeyhole className="h-3.5 w-3.5" /> Uso interno</div>
         </div>
-        <form onSubmit={submit} className="grid gap-4 rounded-xl border border-border bg-card p-6">
-          <div>
-            <h2 className="text-base font-semibold">{firstAdmin ? "Criar o primeiro administrador" : "Entrar"}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {firstAdmin ? "Nenhum administrador existe ainda. Esta conta poderá convidar os demais usuários." : "Acesso somente por convite."}
-            </p>
-          </div>
-          <div className="grid gap-2"><Label htmlFor="email">E-mail</Label><Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-          <div className="grid gap-2"><Label htmlFor="password">Senha</Label><Input id="password" type="password" autoComplete={firstAdmin ? "new-password" : "current-password"} minLength={firstAdmin ? 8 : undefined} required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
-          {error && <p className="text-sm text-danger" role="alert">{error}</p>}
-          <Button type="submit" disabled={busy || bq.isLoading}><Lock className="h-4 w-4" /> {firstAdmin ? "Criar e entrar" : "Entrar"}</Button>
+        <form onSubmit={submit} className="quality-surface mx-auto grid w-full max-w-[460px] gap-5 rounded-xl border border-border bg-card p-6 text-card-foreground shadow-lg sm:p-9">
+          <div className="mb-1"><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Acessar plataforma</h1><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Entre com suas credenciais corporativas.</p></div>
+          <div className="grid gap-2"><Label htmlFor="email" className="text-card-foreground">E-mail corporativo</Label><div className="relative"><Mail aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#686b72]" /><Input id="email" type="email" autoComplete="username" placeholder="nome@empresa.com" required value={email} onChange={(e) => setEmail(e.target.value)} className="h-12 border-[#dedfe2] bg-white pl-10 text-[#202124] placeholder:text-[#686b72]" /></div></div>
+          <div className="grid gap-2"><Label htmlFor="password" className="text-card-foreground">Senha</Label><div className="relative"><LockKeyhole aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#686b72]" /><Input id="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="h-12 border-[#dedfe2] bg-white pl-10 pr-11 text-[#202124]" /><button type="button" aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-[#686b72] hover:bg-[#edeef0]">{showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div></div>
+          {error && <p className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger" role="alert">{error}</p>}
+          <Button type="submit" disabled={busy} className="mt-1 h-12 w-full justify-between bg-[#111111] px-5 text-white hover:bg-black/90"><span className="w-4" aria-hidden="true" />{busy ? "Entrando…" : "Entrar"}<ArrowRight aria-hidden="true" /></Button>
+          <div className="border-t border-border pt-4 text-center text-xs text-muted-foreground">Acesso restrito a usuários autorizados.</div>
         </form>
       </div>
-    </div>
+    </main>
   );
 }
