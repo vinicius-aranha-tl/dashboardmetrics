@@ -164,6 +164,12 @@ export interface DatedTestResult { date: string; runId: string; testKey: string;
 export interface DatedFailure { date: string; runId: string; testKey: string; cause: string }
 export interface DatedFailureHistory { failures: DatedFailure[]; tests: DatedTestResult[]; retentionDays: number | null }
 
+/** Display the scenario rather than the Playwright suite and file path. */
+export function scenarioTitle(title: string): string {
+  const parts = title.split(/\s+›\s+/).map(part => part.trim()).filter(Boolean);
+  return parts.at(-1) ?? title;
+}
+
 /** Uses only definitive failures from the first attempt of scheduled executions. */
 export function normalizeDatedFailures(raw: unknown): DatedFailureHistory {
   if (!isObj(raw) || !Array.isArray(raw["results"])) throw new FormatError("Histórico detalhado de testes não encontrado.");

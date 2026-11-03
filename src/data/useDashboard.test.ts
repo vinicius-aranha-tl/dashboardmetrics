@@ -74,4 +74,11 @@ describe("detalhamento por produto", () => {
     expect(result.failures.rows[0]?.error).toBe("Detalhe não publicado para esta execução");
     expect(result.reasons.rows).toEqual([{ cause: "Timeout", value: 3 }]);
   });
+  it("mostra o título curto e mantém cenários com mesmo nome separados pelo identificador", () => {
+    const tests = ["a", "b"].map(testKey => ({ date: "2026-10-30", runId: "1", testKey, title: "rota.spec.js › Grupo › PBI-123 - Cenário", status: "failed" as const, cause: "Timeout" }));
+    const project = { project: { name: "Projeto" }, executions: [], special: { api: { testHistory: { file: "test-history.json", data: { tests, failures: [], retentionDays: 180 } } } } } as unknown as ProjectData;
+    const result = buildSpecial([project], new Date("2026-10-31T12:00:00Z"), "api", 7);
+    expect(result.failures.rows.map(row => row.title)).toEqual(["PBI-123 - Cenário", "PBI-123 - Cenário"]);
+    expect(result.lifecycle.rows).toHaveLength(2);
+  });
 });
