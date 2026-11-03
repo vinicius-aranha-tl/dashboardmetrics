@@ -62,6 +62,7 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
       const title = name ?? "Visão geral — todos os projetos";
       await exportDashboardPdf({
         title,
+        projectReport: Boolean(projectId),
         subtitle: "Período do relatório: últimos 15 dias",
         sections: apiData.d.projects.flatMap((project) => (["api", "ui"] as const).map((product) => {
           const source = product === "api" ? apiData.d! : uiData.d!;

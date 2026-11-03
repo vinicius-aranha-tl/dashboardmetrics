@@ -21,6 +21,8 @@ export function DailyExecutionVolumeChart({ data }: { data: Execution[] }) {
         <div className="flex min-w-[900px] gap-1">
           {days.map((day) => {
             const executions = visible.filter((execution) => execution.date === day);
+            const hasMissingResults = executions.some((execution) => execution.results.length === 0);
+            const totalTests = executions.reduce((total, execution) => total + execution.results.length, 0);
             return <div key={day} className="min-w-14 flex-1 text-center">
               <div className="flex h-48 items-end justify-center gap-1 border-b border-border px-1">
                 {executions.map((execution, index) => {
@@ -30,6 +32,10 @@ export function DailyExecutionVolumeChart({ data }: { data: Execution[] }) {
                   return <InfoTooltip key={`${execution.triggerId}-${execution.id}`}><TooltipTrigger asChild><button type="button" aria-label={details} className="w-4 min-w-2 max-w-5 rounded-t-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ backgroundColor: tone, height: `${result.total ? Math.max(4, result.total / maximum * 100) : 3}%` }} /></TooltipTrigger><TooltipContent><p>{fmtDate(day)} · {execution.dataSource}</p><p>Execução {index + 1}</p><p>{result.rate == null ? "Resultados indisponíveis" : `${fmtInt(result.total)} testes · ${fmtPct(result.rate)} de sucesso`}</p></TooltipContent></InfoTooltip>;
                 })}
               </div>
+              <div className="mt-2 text-xs font-semibold text-product" aria-label={`${fmtDate(day)}: ${executions.length} execuções do CI; ${hasMissingResults ? "total de testes indisponível" : `${fmtInt(totalTests)} testes`}`}>
+                {hasMissingResults ? "—" : fmtInt(totalTests)}
+              </div>
+              <div className="text-[10px] font-medium text-success">{fmtInt(executions.length)} CI</div>
               <div className="mt-2 text-[10px] text-muted-foreground">{day.slice(5).split("-").reverse().join("/")}</div>
             </div>;
           })}

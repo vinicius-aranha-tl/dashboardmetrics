@@ -2,9 +2,15 @@ import { dailyExecutionVolume, summarize, summarizeExecutionHealth, testCount, t
 import type { DashData } from "@/data/useDashboard";
 
 /** Relatório executivo desenhado com texto e formas vetoriais a partir dos dados, sem capturas da tela. */
-export async function exportDashboardPdf(opts: { title: string; subtitle: string; sections: { projectName: string; product: Product; data: DashData }[]; filename: string }) {
+export async function exportDashboardPdf(opts: { title: string; subtitle: string; projectReport?: boolean; sections: { projectName: string; product: Product; data: DashData }[]; filename: string }) {
   const { jsPDF } = await import("jspdf");
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
+  if (opts.projectReport && opts.sections.length) {
+    const { drawProjectReport } = await import("./projectPdf");
+    drawProjectReport(pdf, opts.sections, opts.subtitle);
+    pdf.save(opts.filename);
+    return;
+  }
   const W = 297, H = 210, M = 18, CW = W - 2 * M, bottom = 190;
   const ink: [number, number, number] = [28, 29, 31];
   const gray: [number, number, number] = [95, 96, 99];
