@@ -65,8 +65,9 @@ function toStatus(v: unknown): TestResult["status"] | null {
   return null;
 }
 
-function toTrigger(v: unknown): Trigger {
+function toTrigger(v: unknown, origin?: unknown, actor?: unknown): Trigger {
   const s = String(v ?? "").toLowerCase();
+  if (s === "workflow_dispatch" && origin === "jenkins_schedule" && String(actor ?? "").toLowerCase() === "joao-paulo-vertem") return "scheduled";
   if (s.includes("merge") || s === "push" || s === "pull_request") return "post-merge";
   if (s.includes("manual") || s === "workflow_dispatch") return "manual";
   if (s === "schedule" || s === "scheduled") return "scheduled";
@@ -131,7 +132,7 @@ export function normalizeExecutions(raw: unknown, product: Product): Execution[]
     const id = String(pick(run, ["id"]) ?? pick(item, ["id", "runId", "run_id"]) ?? `${date}-${i}`);
     const attempt = Number(pick(run, ["attempt"]) ?? pick(item, ["runAttempt", "run_attempt", "attempt"]) ?? 1);
     const triggerId = String(pick(item, ["triggerId", "trigger_id"]) ?? id);
-    const trigger = toTrigger(pick(run, ["event"]) ?? pick(item, ["trigger", "event", "origin"]));
+    const trigger = toTrigger(pick(run, ["event"]) ?? pick(item, ["trigger", "event", "origin"]), pick(run, ["origin"]) ?? item["origin"], pick(run, ["actor"]) ?? item["actor"]);
     const results = readResults(item, i);
     return { id, product, triggerId, runAttempt: Number.isFinite(attempt) && attempt >= 1 ? attempt : 1, trigger, date, results, dataSource: String(pick(item, ["dataSource", "data_source", "workflow"]) ?? product.toUpperCase()) };
   });
@@ -178,7 +179,7 @@ export function normalizeDatedFailures(raw: unknown): DatedFailureHistory {
   for (const [i, item] of raw["results"].entries()) {
     if (!isObj(item)) throw new FormatError(`results[${i}] não é um objeto`);
     const status = toStatus(item["status"]);
-    if (toTrigger(item["event"]) !== "scheduled" || Number(item["runAttempt"] ?? 1) !== 1 || !status) continue;
+    if (toTrigger(item["event"], item["origin"], item["actor"]) !== "scheduled" || Number(item["runAttempt"] ?? 1) !== 1 || !status) continue;
     const date = toDate(item["generatedAt"]), runId = item["runId"], key = item["testKey"];
     if (!date || runId == null || typeof key !== "string" || !key) throw new FormatError(`results[${i}]: falha sem data, execução ou identificador do teste`);
     const title = typeof item["title"] === "string" ? item["title"] : key;
