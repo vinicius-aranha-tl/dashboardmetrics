@@ -194,12 +194,12 @@ export interface FailureRow {
 }
 
 /** Une registros equivalentes sem misturar origens ou motivos diferentes. */
-export function groupFailureOccurrences<T extends { title: string; error: string; detail: string; dataSource: string; occurrences: number; firstSeen: string; firstOccurrence: string; lastOccurrence: string }>(rows: T[]): T[] {
+export function groupFailureOccurrences<T extends { title: string; error: string; detail: string; dataSource: string; occurrences: number; firstSeen: string; firstOccurrence: string; lastOccurrence: string; testKey?: string }>(rows: T[]): T[] {
   const groups = new Map<string, T>();
   const earlier = (a: string, b: string) => !a ? b : !b ? a : a < b ? a : b;
   const later = (a: string, b: string) => !a ? b : !b ? a : a > b ? a : b;
   for (const row of rows) {
-    const key = JSON.stringify([row.dataSource, row.title, row.error, row.detail]);
+    const key = JSON.stringify([row.dataSource, row.testKey || row.title, row.error, row.detail]);
     const previous = groups.get(key);
     if (!previous) groups.set(key, { ...row });
     else groups.set(key, { ...previous, occurrences: previous.occurrences + row.occurrences, firstSeen: earlier(previous.firstSeen, row.firstSeen), firstOccurrence: earlier(previous.firstOccurrence, row.firstOccurrence), lastOccurrence: later(previous.lastOccurrence, row.lastOccurrence) });

@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from "re
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { aggregateEvolution, daysAgoISO, dedupeExecutions, failureRows, filterExecutions, flakyTable, causeDistribution, groupFailureOccurrences, type Product, type Trigger } from "@/lib/metrics";
-import type { ReasonRow, SpecialFailureRow, StabilityRow } from "@/lib/normalize";
+import { scenarioTitle, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
 import type { ProjectData } from "@/lib/sources.functions";
 import { loadDashboardData } from "@/lib/sources.functions";
 
@@ -108,14 +108,14 @@ export function buildSpecial(projects: ProjectData[], now: Date, selectedProduct
             const key = JSON.stringify([test.runId, test.testKey]);
             if (seenTests.has(key)) continue;
             seenTests.add(key);
-            const stats = rows.get(test.testKey) ?? { title: test.title, executions: 0, failureExecutions: 0 };
+            const stats = rows.get(test.testKey) ?? { title: scenarioTitle(test.title), executions: 0, failureExecutions: 0 };
             stats.executions++;
             if (test.status === "failed" || test.status === "flaky") stats.failureExecutions++;
             rows.set(test.testKey, stats);
             if (test.status !== "failed") continue;
             const candidates = (sp?.lifecycle?.data ?? []).filter(row => row.testKey === test.testKey);
             const match = candidates.length === 1 && candidates[0]!.occurrences === 1 && candidates[0]!.firstOccurrence.slice(0, 10) === test.date && candidates[0]!.lastOccurrence.slice(0, 10) === test.date ? candidates[0] : undefined;
-            detailedFailures.push({ title: test.title, error: match?.error || "Detalhe não publicado para esta execução", detail: match?.detail || test.cause || "Causa não classificada", occurrences: 1, dataSource: source, firstSeen: match?.firstSeen || "", firstOccurrence: test.date, lastOccurrence: test.date });
+            detailedFailures.push({ title: scenarioTitle(test.title), testKey: test.testKey, error: match?.error || "Detalhe não publicado para esta execução", detail: match?.detail || test.cause || "Causa não classificada", occurrences: 1, dataSource: source, firstSeen: match?.firstSeen || "", firstOccurrence: test.date, lastOccurrence: test.date });
           }
           for (const row of rows.values()) if (row.failureExecutions >= 3) out.flaky.rows.push({ ...row, dataSource: source, successRate: Math.round(((row.executions - row.failureExecutions) / row.executions) * 10000) / 100 });
           const grouped = groupFailureOccurrences(detailedFailures);

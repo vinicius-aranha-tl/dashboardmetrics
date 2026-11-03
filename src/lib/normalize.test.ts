@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDatedFailures } from "./normalize";
+import { normalizeDatedFailures, scenarioTitle } from "./normalize";
+
+it("exibe somente o título do cenário sem alterar títulos que não contêm hierarquia", () => {
+  expect(scenarioTitle("api/rota.spec.js › Cadastro › PBI-123 - Criar objetivo")).toBe("PBI-123 - Criar objetivo");
+  expect(scenarioTitle("PBI-123 - Criar objetivo")).toBe("PBI-123 - Criar objetivo");
+});
 
 it("preserva datas e categorias apenas de falhas definitivas agendadas na primeira tentativa", () => {
   const base = { generatedAt: "2026-10-30T12:00:00Z", runId: 10, testKey: "a", event: "schedule", runAttempt: 1, status: "failed" };
