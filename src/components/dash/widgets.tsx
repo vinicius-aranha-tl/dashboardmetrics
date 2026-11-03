@@ -13,12 +13,12 @@ export type WidgetType = "success_gauge" | "summary_cards" | "daily_results" | "
 
 export const WIDGET_CATALOG: Record<WidgetType, { kind: ChartKind; label: string; description: string; defaultTitle: string; defaultWidth: "half" | "full"; info?: string }> = {
   success_gauge: { kind: "gauge", label: "Taxa de sucesso", description: "Velocímetro com faixas verde/amarelo/vermelho em relação à meta.", defaultTitle: "Taxa de sucesso", defaultWidth: "half", info: RATE_INFO },
-  summary_cards: { kind: "card", label: "Números principais", description: "Resumo das execuções agendadas e da estabilidade dos testes.", defaultTitle: "Resumo", defaultWidth: "half", info: "Testes: títulos distintos identificados no histórico de execuções agendadas disponível. Esse total depende dos dados capturados e não garante o total atual do repositório. Execuções válidas: execuções agendadas no período selecionado, contando apenas a primeira tentativa de cada execução da Action. Falhas definitivas: resultados de testes que continuaram falhando ao final das tentativas; o mesmo cenário pode contar mais de uma vez em execuções diferentes. Flaky tests: testes distintos que apresentaram falha em pelo menos três execuções nos últimos 30 dias, incluindo falhas recuperadas por retentativa ou definitivas. Essa classificação usa sempre os últimos 30 dias, mesmo quando o filtro superior tiver outro período." },
+  summary_cards: { kind: "card", label: "Números principais", description: "Resumo das execuções agendadas e da estabilidade dos testes.", defaultTitle: "Resumo", defaultWidth: "half", info: "Testes: títulos distintos identificados no histórico de execuções agendadas disponível. Esse total depende dos dados capturados e não garante o total atual do repositório. Execuções válidas: execuções agendadas no período selecionado, contando apenas a primeira tentativa de cada execução da Action. Falhas definitivas: resultados de testes que continuaram falhando ao final das tentativas; o mesmo cenário pode contar mais de uma vez em execuções diferentes. Flaky tests: testes distintos que apresentaram falha em pelo menos três execuções no período selecionado, incluindo falhas recuperadas por retentativa ou definitivas. A classificação acompanha o período escolhido." },
   evolution: { kind: "line", label: "Produto vs automação", description: "Cenários planejados representam condições documentadas pelo coletor da API; cenários automatizados são as condições com evidência correspondente. A contagem não representa produtos nem simplesmente a quantidade de testes.", defaultTitle: "Cruzamento de métricas: cenários planejados vs. automatizados", defaultWidth: "full", info: PROJECTION_INFO },
   rate_trend: { kind: "bands", label: "Taxa de sucesso por dia", description: "Linha da taxa diária sobre as faixas da meta (≥ 90% verde).", defaultTitle: "Taxa de sucesso diária vs meta", defaultWidth: "full", info: RATE_INFO },
   daily_columns: { kind: "column", label: "Resultados diários (colunas)", description: "Aprovados, flaky e falhas por dia em colunas empilhadas.", defaultTitle: "Resultados diários", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
   daily_results: { kind: "line", label: "Resultados diários (área)", description: "Área empilhada de aprovados, flaky e falhas por dia.", defaultTitle: "Resultados diários (área)", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
-  daily_execution_volume: { kind: "column", label: "Volume diário de execuções", description: "Uma barra por execução agendada do CI, agrupada por dia nos últimos 15 dias.", defaultTitle: "Volume diário de execuções", defaultWidth: "full", info: "A altura representa a quantidade de resultados de testes na execução. A cor representa a taxa de sucesso, incluindo flaky recuperados: verde a partir de 90%, amarelo de 80% a menos de 90% e vermelho abaixo de 80%. Resultados indisponíveis não recebem classificação. Considera a primeira tentativa de cada execução agendada; os últimos 15 dias são fixos, independentemente do filtro superior." },
+  daily_execution_volume: { kind: "column", label: "Volume diário de execuções", description: "Uma barra por execução agendada do CI, agrupada por dia no período selecionado.", defaultTitle: "Volume diário de execuções", defaultWidth: "full", info: "A altura representa a quantidade de resultados de testes na execução. A cor representa a taxa de sucesso, incluindo flaky recuperados: verde a partir de 90%, amarelo de 80% a menos de 90% e vermelho abaixo de 80%. Resultados indisponíveis não recebem classificação. Considera a primeira tentativa de cada execução agendada; o período acompanha o filtro superior." },
   top_failures: { kind: "bar", label: "Testes que mais falham", description: "Ranking dos 10 testes com mais falhas definitivas.", defaultTitle: "Testes que mais falham", defaultWidth: "half", info: "Soma das ocorrências de falha definitiva por teste no período." },
   cause_donut: { kind: "bar", label: "Falhas por causa", description: "Quantidade de falhas definitivas por causa, da mais frequente para a menos frequente.", defaultTitle: "Falhas por causa", defaultWidth: "half" },
   quality_funnel: { kind: "funnel", label: "Funil de qualidade", description: "Condições do produto → automatizadas → testes executados → sem falha.", defaultTitle: "Funil de qualidade", defaultWidth: "half", info: "Condições = última semana do período. Testes executados e sem falha definitiva = testes distintos no período." },
@@ -27,9 +27,9 @@ export const WIDGET_CATALOG: Record<WidgetType, { kind: ChartKind; label: string
   stability_scatter: { kind: "scatter", label: "Estabilidade dos testes", description: "Cada ponto é um teste: execuções × vezes que não passou de primeira.", defaultTitle: "Estabilidade dos testes", defaultWidth: "half" },
   origin_radar: { kind: "radar", label: "Taxa por origem", description: "Taxa de sucesso por origem: agendada, pós-merge e manual.", defaultTitle: "Taxa de sucesso por origem", defaultWidth: "half", info: RATE_INFO },
   failure_treemap: { kind: "treemap", label: "Falhas por causa e teste", description: "Hierarquia: causa → testes, proporcional às ocorrências.", defaultTitle: "Falhas por causa e teste", defaultWidth: "full" },
-  flaky_table: { kind: "matrix", label: "Tabela de flaky tests", description: "Testes instáveis nos últimos 30 dias.", defaultTitle: "Flaky tests — últimos 30 dias", defaultWidth: "full", info: "Um teste é considerado instável quando apresenta falha em pelo menos três execuções nos últimos 30 dias. Cada execução conta uma vez, incluindo falhas recuperadas por retentativa ou definitivas. O contador representa testes distintos por origem." },
-  failure_details: { kind: "matrix", label: "Detalhamento das falhas", description: "Falhas definitivas dos últimos 30 dias, agrupadas por cenário e erro.", defaultTitle: "Detalhamento das falhas — últimos 30 dias", defaultWidth: "full", info: "Falhas definitivas agrupadas por cenário e erro. O total ao lado representa a distribuição por causa para a aba selecionada. Este painel sempre usa os últimos 30 dias." },
-  failure_history: { kind: "matrix", label: "Histórico de falhas", description: "Ciclo de vida das falhas, sem limite de período.", defaultTitle: "Histórico de falhas — ciclo de vida", defaultWidth: "full", info: "Sem limite de período. A primeira execução registrada é a mais antiga capturada e pode não ser a data de criação do teste. Primeira e última ocorrência referem-se a falhas definitivas." },
+  flaky_table: { kind: "matrix", label: "Tabela de flaky tests", description: "Testes instáveis no período selecionado.", defaultTitle: "Flaky tests — período selecionado", defaultWidth: "full", info: "Um teste é considerado instável quando apresenta falha em pelo menos três execuções no período selecionado. Cada execução conta uma vez, incluindo falhas recuperadas por retentativa ou definitivas. O contador representa testes distintos por origem." },
+  failure_details: { kind: "matrix", label: "Detalhamento das falhas", description: "Falhas definitivas do período selecionado, agrupadas por cenário e erro.", defaultTitle: "Detalhamento das falhas — período selecionado", defaultWidth: "full", info: "Falhas definitivas agrupadas por cenário e erro. O total ao lado representa a distribuição por causa para a aba selecionada. Este painel usa o período selecionado." },
+  failure_history: { kind: "matrix", label: "Histórico de falhas", description: "Falhas registradas no período selecionado.", defaultTitle: "Histórico de falhas — ciclo de vida", defaultWidth: "full", info: "A primeira execução exibida é a mais antiga registrada no período e pode não ser a data de criação do teste. Primeira e última ocorrência referem-se a falhas definitivas." },
   project_ranking: { kind: "matrix", label: "Comparativo por projeto", description: "Taxa de sucesso, falhas e cobertura de cada projeto.", defaultTitle: "Comparativo por projeto", defaultWidth: "full" },
 };
 
@@ -71,7 +71,7 @@ export function ProjectionSummary({ projection }: { projection: Projection }) {
 function filterWeeks<T extends { week: string }>(pts: T[], periodDays: number | null): T[] {
   if (periodDays == null) return pts;
   const from = new Date();
-  from.setUTCDate(from.getUTCDate() - periodDays);
+  from.setUTCDate(from.getUTCDate() - periodDays + 1);
   const iso = from.toISOString().slice(0, 10);
   return pts.filter((p) => p.week >= iso);
 }
@@ -82,6 +82,7 @@ const emptySourceMessage = (used: SourceUse[], empty: string) =>
   used.length > 0 && used.every((source) => source.fallback && source.reason)
     ? "Sem dados disponíveis para esta consulta. Confira as informações do gráfico."
     : empty;
+const sourceWarnings = (used: SourceUse[]) => [...new Set(used.flatMap(source => source.reason ? [source.reason] : []))];
 
 export function WidgetBody({ type, d, product, periodLabel }: { type: string; d: DashData; product: Product; periodLabel: string }) {
   switch (type as WidgetType) {
@@ -100,14 +101,14 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
           <StatCard prominent label="Testes" value={fmtInt(testCount(d.valid, product))} tone="product" />
           <StatCard prominent label="Execuções válidas" value={fmtInt(d.inPeriod.length)} hint="Reruns ignorados" />
           <StatCard prominent label="Falhas definitivas" value={fmtInt(s.failed)} tone={s.failed ? "danger" : "success"} />
-          <StatCard prominent label="Flaky tests (30 dias)" value={flakyUnavailable ? "—" : fmtInt(flakyCount)} tone={flakyUnavailable ? undefined : flakyCount ? "warning" : "success"} />
+          <StatCard prominent label="Flaky tests" value={flakyUnavailable ? "—" : fmtInt(flakyCount)} tone={flakyUnavailable ? undefined : flakyCount ? "warning" : "success"} />
         </div>
       );
     }
     case "daily_results":
       return <DailyChart data={dailyResults(d.inPeriod)} />;
     case "daily_execution_volume":
-      return <DailyExecutionVolumeChart data={d.valid} />;
+      return <DailyExecutionVolumeChart data={d.inPeriod} periodDays={d.periodDays} />;
     case "evolution": {
       const proj = computeProjection(filterWeeks(d.evolution, d.periodDays));
       const last = proj.series.filter((p) => p.productConditions != null).at(-1);
@@ -159,7 +160,7 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
       return (
         <>
           <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-            <DataTable detailView rows={f.rows as unknown as Row[]} empty={emptySourceMessage(f.used, "Nenhum flaky test nos últimos 30 dias.")} initialSort={{ key: "failureExecutions", dir: "desc" }} columns={[
+            <DataTable detailView rows={f.rows as unknown as Row[]} empty={emptySourceMessage(f.used, "Nenhum flaky test no período selecionado.")} initialSort={{ key: "failureExecutions", dir: "desc" }} columns={[
               { key: "title", label: "Cenário", width: 360 },
               { key: "executions", label: "Execuções", numeric: true, width: 150 },
               { key: "failureExecutions", label: "Execuções com falha", numeric: true, width: 210 },
@@ -176,23 +177,23 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
       const reasons = d.specialByProduct.reasons;
       return (
         <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(230px,300px)]">
-          <DataTable detailView rows={f.rows as unknown as Row[]} empty={emptySourceMessage(f.used, "Nenhuma falha definitiva nos últimos 30 dias.")} initialSort={{ key: "occurrences", dir: "desc" }} columns={[
+          <DataTable detailView rows={f.rows as unknown as Row[]} empty={emptySourceMessage(f.used, "Nenhuma falha definitiva no período selecionado.")} initialSort={{ key: "occurrences", dir: "desc" }} columns={[
             { key: "title", label: "Cenário", width: 340 },
             { key: "error", label: "Erro", width: 340, className: mono },
             { key: "detail", label: "Causa do erro", width: 360, className: "text-muted-foreground" },
             { key: "occurrences", label: "Ocorrência", numeric: true, width: 150 },
           ]} />
-          <div className="flex min-w-0 flex-col rounded-lg border border-border p-3"><h3 className="text-sm font-semibold">Total de falhas — últimos 30 dias</h3><div className="flex flex-1 items-center justify-center">{!reasons.rows.length && reasons.used.length > 0 && reasons.used.every(source => source.fallback && source.reason) ? <EmptyState>Dados indisponíveis.</EmptyState> : <CauseDonut data={reasons.rows} showTotal />}</div></div>
+          <div className="flex min-w-0 flex-col rounded-lg border border-border p-3"><h3 className="text-sm font-semibold">Total de falhas — período selecionado</h3><div className="flex flex-1 items-center justify-center">{!reasons.rows.length && reasons.used.length > 0 && reasons.used.every(source => source.fallback && source.reason) ? <EmptyState>Dados indisponíveis.</EmptyState> : <CauseDonut data={reasons.rows} showTotal />}</div></div>
         </div>
       );
     }
     case "cause_donut":
-      return (<>{!d.specialByProduct.reasons.rows.length && d.specialByProduct.reasons.used.length > 0 && d.specialByProduct.reasons.used.every((source) => source.fallback && source.reason) ? <EmptyState>Sem dados de falhas disponíveis para esta consulta.</EmptyState> : <CauseBars data={d.specialByProduct.reasons.rows} />}</>);
+      return (<>{sourceWarnings(d.specialByProduct.reasons.used).map(warning => <p key={warning} className="mb-3 text-xs text-warning">{warning}</p>)}{!d.specialByProduct.reasons.rows.length && d.specialByProduct.reasons.used.length > 0 && d.specialByProduct.reasons.used.every((source) => source.fallback && source.reason) ? <EmptyState>Sem dados de falhas disponíveis para esta consulta.</EmptyState> : <CauseBars data={d.specialByProduct.reasons.rows} />}</>);
     case "failure_history": {
       const f = d.specialByProduct.lifecycle;
       return (
         <>
-          <p className="mb-3 text-xs text-muted-foreground">A primeira execução é a mais antiga registrada, não necessariamente a data de criação do teste.</p>
+          <p className="mb-3 text-xs text-muted-foreground">A primeira execução é a mais antiga registrada no período, não necessariamente a data de criação do teste.</p>
           <DataTable detailView rows={f.rows as unknown as Row[]} empty={emptySourceMessage(f.used, "Nenhuma falha registrada.")} initialSort={{ key: "occurrences", dir: "desc" }} columns={[
             { key: "title", label: "Cenário", width: 340 },
             { key: "error", label: "Erro", width: 340, className: mono },
@@ -210,7 +211,7 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
         const ex = d.inPeriod.filter((e) => e.triggerId.startsWith(p.project.id));
         const s = summarize(ex);
         const evo = p.evolution[product].at(-1);
-        const flaky = buildSpecial([p], new Date(), product).flaky;
+        const flaky = buildSpecial([p], new Date(), product, d.periodDays).flaky;
         const flakyUnavailable = flaky.used.length > 0 && flaky.used.every(source => source.fallback && source.reason);
         const coverageUnverified = evo?.automatedConditions === 0 && ex.some(run => run.results.length > 0);
         return {

@@ -90,7 +90,7 @@ export function filterExecutions(execs: Execution[], f: ExecFilter): Execution[]
     (e) =>
       (f.product === "all" || e.product === f.product) &&
       f.origins.includes(e.trigger) &&
-      (from == null || e.date >= from),
+      (from == null || e.date >= from) && e.date <= daysAgoISO(f.now, 0),
   );
 }
 
