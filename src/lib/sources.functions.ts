@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBackendAuth } from "@/lib/backend-auth";
 import { mapProject } from "@/lib/backend-client";
 import type { EvolutionPoint, Execution, Product } from "@/lib/metrics";
-import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, SQUAREDUP_FILES, STABILITY_FILE, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
+import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeDatedFailures, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, SQUAREDUP_FILES, STABILITY_FILE, TEST_HISTORY_FILE, type DatedFailureHistory, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
 
 export type SourceKind = "executions" | "evolution";
 export interface SourceStatus {
@@ -76,6 +76,7 @@ export interface ProjectData {
     stability: { status: SourceStatus; file: string; data: StabilityRow[] | null };
     reasons: { status: SourceStatus; file: string; data: { failures: SpecialFailureRow[]; reasons: ReasonRow[] } | null };
     lifecycle: { status: SourceStatus; file: string; data: SpecialFailureRow[] | null };
+    testHistory?: { status: SourceStatus; file: string; data: DatedFailureHistory | null };
   }>;
   fetchedAt: string;
   sourceFingerprint?: string;
@@ -94,7 +95,7 @@ export const loadDashboardData = createServerFn({ method: "POST" })
     const projects = (await response.json() as Parameters<typeof mapProject>[0][]).map(mapProject).filter(p => !data.slug || p.slug === data.slug);
     const out: ProjectData[] = [];
     for (const p of projects ?? []) {
-      const sourceKey = JSON.stringify([p.api_repo_owner, p.api_repo_name, p.api_branch, p.ui_repo_owner, p.ui_repo_name, p.ui_branch, p.api_executions_url, p.api_evolution_url, p.ui_executions_url, p.ui_evolution_url]);
+      const sourceKey = JSON.stringify(["dated-failures-v2", p.api_repo_owner, p.api_repo_name, p.api_branch, p.ui_repo_owner, p.ui_repo_name, p.ui_branch, p.api_executions_url, p.api_evolution_url, p.ui_executions_url, p.ui_evolution_url]);
       const fingerprint = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sourceKey)))].map(byte => byte.toString(16).padStart(2, "0")).join("");
       const snapshotUrl = `${backendUrl}/api/v1/metric-snapshots/${encodeURIComponent(p.id)}`;
       const snapshotResponse = await fetch(snapshotUrl, { headers: { cookie: context.backendCookie } });
@@ -135,15 +136,17 @@ export const loadDashboardData = createServerFn({ method: "POST" })
         evolution[product] = ev.data ?? [];
         const ds = `${p.name} · ${product.toUpperCase()}`;
         const u = (f: string) => (r ? contentsUrl(r.owner, r.name, r.branch, f) : null);
-        const [st, rs, lc] = await Promise.all([
+        const [st, rs, lc, th] = await Promise.all([
           readSource(u(STABILITY_FILE), (raw) => normalizeStability(raw, ds), force),
           readSource(u(REASONS_FILE), (raw) => normalizeReasons(requireScheduledScope(raw), ds), force, (d) => d.failures.length),
           readSource(u(LIFECYCLE_FILE), (raw) => normalizeLifecycle(requireScheduledScope(raw), ds), force),
+          readSource(u(TEST_HISTORY_FILE), normalizeDatedFailures, force, d => d.failures.length, true),
         ]);
         special[product] = {
           stability: { ...st, file: STABILITY_FILE },
           reasons: { ...rs, file: REASONS_FILE },
           lifecycle: { ...lc, file: LIFECYCLE_FILE },
+          testHistory: { ...th, file: TEST_HISTORY_FILE },
         };
       }
       const failed = (["api", "ui"] as const).some(product => sources[product].executions.mode === "error" || sources[product].evolution.mode === "error");

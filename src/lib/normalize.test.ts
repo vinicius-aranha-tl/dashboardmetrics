@@ -1,4 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { normalizeDatedFailures } from "./normalize";
+
+it("preserva datas e categorias apenas de falhas definitivas agendadas na primeira tentativa", () => {
+  const base = { generatedAt: "2026-10-30T12:00:00Z", runId: 10, testKey: "a", event: "schedule", runAttempt: 1, status: "failed" };
+  const result = normalizeDatedFailures({ retentionDays: 180, results: [{ ...base, failureCategory: "Timeout" }, { ...base, testKey: "b" }, { ...base, testKey: "c", runAttempt: 2 }, { ...base, testKey: "d", event: "push" }, { ...base, testKey: "e", status: "flaky" }] });
+  expect(result.failures.map(row => row.cause)).toEqual(["Timeout", "Histórico sem classificação"]);
+  expect(result.retentionDays).toBe(180);
+});
 import { decodeGithubContent, FormatError, normalizeEvolution, normalizeExecutions } from "./normalize";
 
 describe("decodeGithubContent", () => {

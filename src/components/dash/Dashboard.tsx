@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { buildSpecial, useDashboardData } from "@/data/useDashboard";
+import { buildSpecial, PERIOD_LABEL, useDashboardData, useFilters } from "@/data/useDashboard";
 import { exportDashboardPdf } from "@/lib/pdfExport";
 import { CHART_KINDS, ChartIcon } from "./chartKinds";
 import { filterExecutions, type Product } from "@/lib/metrics";
@@ -51,6 +51,7 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
   const [exporting, setExporting] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const { canEdit } = useAuth();
+  const { filters } = useFilters();
   const apiData = useDashboardData(slug, "api");
   const uiData = useDashboardData(slug, "ui");
   useEffect(() => { setEditMode(false); }, [projectId]);
@@ -62,9 +63,9 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
       const title = name ?? "Visão geral — todos os projetos";
       await exportDashboardPdf({
         title,
-        projectReport: Boolean(projectId),
-        subtitle: "Período do relatório: últimos 15 dias",
-        sections: apiData.d.projects.flatMap((project) => (["api", "ui"] as const).map((product) => {
+        projectReport: true,
+        subtitle: `Período do relatório: ${PERIOD_LABEL[filters.period]}`,
+        sections: !projectId ? (["api", "ui"] as const).map(product => ({ projectName: "Visão geral · todos os projetos", product, data: product === "api" ? apiData.d! : uiData.d! })) : apiData.d.projects.flatMap((project) => (["api", "ui"] as const).map((product) => {
           const source = product === "api" ? apiData.d! : uiData.d!;
           const matchingProject = source.projects.find((item) => item.project.id === project.project.id) ?? project;
           const ids = new Set(matchingProject.executions.map((execution) => execution.triggerId));
@@ -75,11 +76,11 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
               ...source,
               projects: [matchingProject],
               valid: source.valid.filter((execution) => ids.has(execution.triggerId)),
-              inPeriod: filterExecutions(source.valid.filter((execution) => ids.has(execution.triggerId)), { product, origins: ["scheduled"], periodDays: 15, now: new Date() }),
+              inPeriod: filterExecutions(source.valid.filter((execution) => ids.has(execution.triggerId)), { product, origins: ["scheduled"], periodDays: source.periodDays, now: new Date() }),
               allHistory: source.allHistory.filter((execution) => ids.has(execution.triggerId)),
               evolution: matchingProject.evolution[product],
-              special: buildSpecial([matchingProject], new Date()),
-              specialByProduct: buildSpecial([matchingProject], new Date(), product),
+              special: buildSpecial([matchingProject], new Date(), undefined, source.periodDays),
+              specialByProduct: buildSpecial([matchingProject], new Date(), product, source.periodDays),
             },
           };
         })),
@@ -105,6 +106,7 @@ export function Dashboard({ projectId, slug, name, onSources }: { projectId: str
         <div className="flex flex-wrap gap-2">
           {canEdit && <Button size="sm" variant={editMode ? "secondary" : "outline"} aria-pressed={editMode} onClick={() => setEditMode((current) => !current)}><Pencil className="h-4 w-4" /> {editMode ? "Concluir edição" : "Editar painel"}</Button>}
           {canEdit && editMode && onSources && <Button size="sm" variant="outline" onClick={onSources}><Settings2 className="h-4 w-4" /> Fontes do GitHub</Button>}
+          <span className="self-center rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground">Monitoramento de testes: HML</span>
           <Button size="sm" disabled={exporting} onClick={exportPdf}><FileDown className="h-4 w-4" /> {exporting ? "Gerando relatório…" : "Exportar relatório"}</Button>
         </div>
       </div>
@@ -211,7 +213,7 @@ function ProductDashboard({ projectId, slug, product, editMode }: { projectId: s
           {displayedWidgets.map((w, i) => (
             <Panel
               key={w.id ?? `d${i}`}
-              title={w.widget_type === "evolution" && w.title === "Evolução do produto versus automação" ? WIDGET_CATALOG.evolution.defaultTitle : w.title}
+              title={w.widget_type === "evolution" && w.title === "Evolução do produto versus automação" ? WIDGET_CATALOG.evolution.defaultTitle : ["flaky_table", "failure_details", "failure_history"].includes(w.widget_type) ? w.title.replace(/\s*[—-]\s*últimos 30 dias/iu, "").replace(/\s*[—-]\s*ciclo de vida/iu, "") : w.title}
               info={<><MetricExplanation type={w.widget_type} /><div className="space-y-1"><p className="font-semibold">Fontes de dados</p>{(w.widget_type === "flaky_table" ? d.specialByProduct.flaky.used : w.widget_type === "failure_details" ? d.specialByProduct.failures.used : w.widget_type === "cause_donut" ? d.specialByProduct.reasons.used : w.widget_type === "failure_history" ? d.specialByProduct.lifecycle.used : []).map((u, index) => <p key={index}>{u.product.toUpperCase()}: {u.file}{u.fallback ? ` (alternativa${u.reason ? `: ${u.reason}` : ""})` : ""}</p>)}{!["flaky_table", "failure_details", "cause_donut", "failure_history"].includes(w.widget_type) && d.projects.map(p => <p key={p.project.id}>{p.project.name}: {product.toUpperCase()} — {w.widget_type === "evolution" || w.widget_type === "coverage_waterfall" ? "evolução" : "execuções"} ({(w.widget_type === "evolution" || w.widget_type === "coverage_waterfall" ? p.sources[product].evolution : p.sources[product].executions).mode})</p>)}</div></>}
               className={cn(w.width === "full" && "lg:col-span-2")}
               pdfInfo={`${WIDGET_CATALOG[w.widget_type as WidgetType]?.description ?? ""} ${WIDGET_CATALOG[w.widget_type as WidgetType]?.info ?? ""}`.trim()}

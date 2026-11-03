@@ -15,6 +15,7 @@ export const SQUAREDUP_FILES: Record<Product, string[]> = {
 };
 /** Which file feeds executions and weekly evolution. */
 export const EXECUTIONS_FILE = "history.json";
+export const TEST_HISTORY_FILE = "test-history.json";
 export const EVOLUTION_FILE: Record<Product, string> = {
   api: "api-automation-evolution.json",
   ui: "ui-automation-evolution.json",
@@ -88,7 +89,7 @@ function readTest(t: unknown, where: string): TestResult {
   if (!status) throw new FormatError(`${where}.status desconhecido`);
   const str = (k: string[]) => { const v = pick(t, k); return v == null ? undefined : String(v); };
   const r: TestResult = { title, status };
-  const error = str(["error", "message"]), detail = str(["detail", "details", "stack"]), cause = str(["cause", "reason", "category"]);
+  const error = str(["error", "message"]), detail = str(["detail", "details", "stack"]), cause = str(["cause", "reason", "category", "failureCategory"]);
   if (error) r.error = error;
   if (detail) r.detail = detail;
   if (cause) r.cause = cause;
@@ -159,7 +160,30 @@ export const LIFECYCLE_FILE = "failure-lifecycle.json";
 
 export interface StabilityRow { title: string; executions: number; failureExecutions: number; successRate: number | null; dataSource: string }
 export interface ReasonRow { cause: string; value: number }
-export interface SpecialFailureRow { title: string; error: string; detail: string; occurrences: number; dataSource: string; firstSeen: string; firstOccurrence: string; lastOccurrence: string }
+export interface DatedTestResult { date: string; runId: string; testKey: string; title: string; status: TestResult["status"]; cause?: string }
+export interface DatedFailure { date: string; runId: string; testKey: string; cause: string }
+export interface DatedFailureHistory { failures: DatedFailure[]; tests: DatedTestResult[]; retentionDays: number | null }
+
+/** Uses only definitive failures from the first attempt of scheduled executions. */
+export function normalizeDatedFailures(raw: unknown): DatedFailureHistory {
+  if (!isObj(raw) || !Array.isArray(raw["results"])) throw new FormatError("Histórico detalhado de testes não encontrado.");
+  const failures: DatedFailure[] = [];
+  const tests: DatedTestResult[] = [];
+  for (const [i, item] of raw["results"].entries()) {
+    if (!isObj(item)) throw new FormatError(`results[${i}] não é um objeto`);
+    const status = toStatus(item["status"]);
+    if (toTrigger(item["event"]) !== "scheduled" || Number(item["runAttempt"] ?? 1) !== 1 || !status) continue;
+    const date = toDate(item["generatedAt"]), runId = item["runId"], key = item["testKey"];
+    if (!date || runId == null || typeof key !== "string" || !key) throw new FormatError(`results[${i}]: falha sem data, execução ou identificador do teste`);
+    const title = typeof item["title"] === "string" ? item["title"] : key;
+    const cause = item["failureCategory"] ? String(item["failureCategory"]) : undefined;
+    tests.push({ date, runId: String(runId), testKey: key, title, status, ...(cause ? { cause } : {}) });
+    if (status === "failed") failures.push({ date, runId: String(runId), testKey: key, cause: cause || "Histórico sem classificação" });
+  }
+  const retention = Number(raw["retentionDays"]);
+  return { failures, tests, retentionDays: Number.isFinite(retention) && retention > 0 ? retention : null };
+}
+export interface SpecialFailureRow { title: string; error: string; detail: string; occurrences: number; dataSource: string; firstSeen: string; firstOccurrence: string; lastOccurrence: string; testKey?: string }
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : Number(v) || 0);
@@ -207,6 +231,7 @@ export function normalizeLifecycle(raw: unknown, dataSource: string): SpecialFai
 
 function failureRow(f: Obj, i: number, dataSource: string): SpecialFailureRow {
   return {
+    ...(str(f["testKey"]) ? { testKey: str(f["testKey"]) } : {}),
     title: titleOf(f, i), error: str(f["error"]), detail: str(f["detail"]), occurrences: num(f["occurrences"]),
     dataSource: str(f["dataSourceName"]) || dataSource,
     firstSeen: str(f["firstSeen"]), firstOccurrence: str(f["firstOccurrence"]), lastOccurrence: str(f["lastOccurrence"]),

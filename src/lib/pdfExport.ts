@@ -7,7 +7,8 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4", compress: true });
   if (opts.projectReport && opts.sections.length) {
     const { drawProjectReport } = await import("./projectPdf");
-    drawProjectReport(pdf, opts.sections, opts.subtitle);
+    const logo = await fetch("/quality-hub-conecta.png").then(response => response.ok ? response.arrayBuffer() : null).then(data => data ? new Uint8Array(data) : undefined).catch(() => undefined);
+    drawProjectReport(pdf, opts.sections, opts.subtitle, logo);
     pdf.save(opts.filename);
     return;
   }
@@ -26,7 +27,7 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
     pdf.setFillColor(242, 242, 242).rect(0, 0, W, H, "F");
     pdf.setFont("helvetica", "bold").setFontSize(9).setTextColor(...red).text(text(kicker), M, 17);
     pdf.setFont("helvetica", "bold").setFontSize(23).setTextColor(...ink).text(text(title), M, 29);
-    pdf.setFont("helvetica", "normal").setFontSize(10).setTextColor(...gray).text(text(subtitle), M, 37);
+    pdf.setFont("helvetica", "normal").setFontSize(10).setTextColor(...gray).text(text(`${subtitle} · Monitoramento de testes: HML`), M, 37);
     y = 45;
   }
   function page(kicker: string, title: string, subtitle: string, first = false) {
@@ -63,7 +64,7 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
     card(M + 2 * (width + gap), y, width, sourcesReady ? number(data.inPeriod.length) : "Indisponível", "Execuções válidas", "Agendadas; reruns ignorados", ink);
     y += 48;
     card(M, y, width, sourcesReady ? number(s.failed) : "Indisponível", "Falhas definitivas", "Resultados que terminaram com falha", red);
-    card(M + width + gap, y, width, !sourcesReady || flakyUnavailable ? "Indisponível" : number(flakyCount), "Flaky tests", "Testes distintos nos últimos 30 dias", [154, 91, 0]);
+    card(M + width + gap, y, width, !sourcesReady || flakyUnavailable ? "Indisponível" : number(flakyCount), "Flaky tests", "Testes distintos no período selecionado", [154, 91, 0]);
     const last = [...data.evolution].sort((a, b) => a.week.localeCompare(b.week)).at(-1);
     const coverage = last && last.productConditions > 0 && last.automatedConditions > 0 ? percent(last.automatedConditions / last.productConditions * 100) : "Não apurada";
     card(M + 2 * (width + gap), y, width, coverage, "Cobertura do contrato", "Conforme dados publicados da evolução", gray);
@@ -103,14 +104,14 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
       if (health.missing.length) line(`${number(health.missing.length)} execuções sem resultados disponíveis ficaram fora das taxas.`, 8);
     }
     const reasonData = data.specialByProduct.reasons;
-    page(category, "Principais causas de falha", "Falhas definitivas · últimos 30 dias, conforme painel");
+    page(category, "Principais causas de falha", "Falhas definitivas · período selecionado");
     const reasons = reasonData.rows.slice().sort((a, b) => b.value - a.value);
     const total = reasons.reduce((sum, item) => sum + item.value, 0);
     if (!reasons.length) line(reasonData.used.length > 0 && reasonData.used.every(u => u.fallback && u.reason) ? "Dados de causas indisponíveis." : "Nenhuma falha definitiva registrada neste período.");
     else for (const [index, item] of reasons.entries()) {
       const name = pdf.splitTextToSize(text(`${index + 1}. ${item.cause}`), 107) as string[];
       const h = Math.max(9, name.length * 3.8 + 2);
-      if (y + h > bottom) { page(category, "Principais causas - continuação", "Falhas definitivas · últimos 30 dias, conforme painel"); }
+      if (y + h > bottom) { page(category, "Principais causas - continuação", "Falhas definitivas · período selecionado"); }
       pdf.setFont("helvetica", "normal").setFontSize(8.5).setTextColor(...ink).text(name, M, y + 4);
       pdf.setFillColor(222, 222, 222).roundedRect(M + 113, y, 120, 5, 1, 1, "F");
       pdf.setFillColor(...(index < 3 ? red : gray)).roundedRect(M + 113, y, 120 * item.value / Math.max(1, reasons[0]!.value), 5, 1, 1, "F");
@@ -119,7 +120,7 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
     }
     if (reasons.length) {
       y += 5;
-      if (y > bottom - 25) page(category, "Entenda as categorias", "Falhas definitivas · últimos 30 dias, conforme painel");
+      if (y > bottom - 25) page(category, "Entenda as categorias", "Falhas definitivas · período selecionado");
       pdf.setFont("helvetica", "bold").setFontSize(11).setTextColor(...ink).text("Sobre as categorias", M, y);
       y += 6;
       line("As descrições explicam cada classificação e não comprovam a causa raiz de cada falha.", 8);
@@ -134,7 +135,7 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
       };
       y += 2;
       for (const item of reasons) {
-        if (y > bottom - 16) page(category, "Entenda as categorias - continuação", "Falhas definitivas · últimos 30 dias, conforme painel");
+        if (y > bottom - 16) page(category, "Entenda as categorias - continuação", "Falhas definitivas · período selecionado");
         pdf.setFont("helvetica", "bold").setFontSize(9).setTextColor(...ink).text(text("• " + item.cause).replace("•", "-"), M, y);
         y += 5;
         line("Possível motivo: " + explanation(item.cause), 8);
