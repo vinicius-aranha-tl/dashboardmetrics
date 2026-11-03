@@ -30,7 +30,7 @@ interface Widget {
 
 function defaultsFor(isOverview: boolean): Omit<Widget, "id">[] {
   const list = [...DEFAULT_WIDGETS];
-  if (isOverview) list.splice(2, 0, { widget_type: "project_ranking", width: "full" });
+  if (isOverview) list.splice(3, 0, { widget_type: "project_ranking", width: "full" });
   return list.map((w, i) => ({ ...w, title: WIDGET_CATALOG[w.widget_type].defaultTitle, position: i }));
 }
 
@@ -129,6 +129,16 @@ function ProductDashboard({ projectId, slug, product, editMode }: { projectId: s
   });
   const stored = wq.data ?? [];
   const widgets: Widget[] = stored.length ? stored : defaultsFor(!projectId).map((w) => ({ ...w, id: null }));
+  const displayedWidgets = [...widgets];
+  if (!editMode) {
+    const chartIndex = displayedWidgets.findIndex((widget) => widget.widget_type === "daily_execution_volume");
+    const summaryIndex = displayedWidgets.findIndex((widget) => widget.widget_type === "summary_cards");
+    if (chartIndex >= 0 && summaryIndex >= 0) {
+      const [chart] = displayedWidgets.splice(chartIndex, 1);
+      const position = displayedWidgets.findIndex((widget) => widget.widget_type === "summary_cards");
+      displayedWidgets.splice(position + 1, 0, chart!);
+    }
+  }
   const [editing, setEditing] = useState<Widget | "new" | null>(null);
   useEffect(() => { if (!editMode) setEditing(null); }, [editMode]);
 
@@ -197,7 +207,7 @@ function ProductDashboard({ projectId, slug, product, editMode }: { projectId: s
         <EmptyState>Nenhum gráfico neste painel.</EmptyState>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {widgets.map((w, i) => (
+          {displayedWidgets.map((w, i) => (
             <Panel
               key={w.id ?? `d${i}`}
               title={w.widget_type === "evolution" && w.title === "Evolução do produto versus automação" ? WIDGET_CATALOG.evolution.defaultTitle : w.title}

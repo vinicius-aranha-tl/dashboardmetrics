@@ -4,7 +4,7 @@ import type { ChartKind } from "./chartKinds";
 import { buildSpecial, ORIGIN_LABEL } from "@/data/useDashboard";
 import { EmptyState, StatCard, fmtDate, fmtInt, fmtPct } from "./primitives";
 import type { DashData, SourceUse } from "@/data/useDashboard";
-import { causeDistribution, computeProjection, coverageWaterfall, dailyExecutionVolume, dailyRate, dailyResults, failureHeatmap, qualityFunnel, rateByOrigin, testStability, topFailingTests, failureRows, flakyTable, summarize, testCount, type Product, type Projection } from "@/lib/metrics";
+import { causeDistribution, computeProjection, coverageWaterfall, dailyRate, dailyResults, failureHeatmap, qualityFunnel, rateByOrigin, testStability, topFailingTests, failureRows, flakyTable, summarize, testCount, type Product, type Projection } from "@/lib/metrics";
 
 export const RATE_INFO = "Taxa = (aprovados + flaky) ÷ total de resultados. Flaky terminou aprovado após retry interno e não reduz o sucesso. Falha = teste que falhou definitivamente. Reruns da mesma Action são ignorados; só conta a primeira tentativa de cada gatilho. Verde ≥ 90%, amarelo 80–89,99%, vermelho < 80%.";
 export const PROJECTION_INFO = "Velocidade = inclinação (regressão linear) das últimas até 8 semanas. A projeção só é desenhada quando a automação cresce mais rápido que o produto e há pelo menos 3 semanas de histórico. Semanas restantes = diferença atual ÷ (velocidade automação − velocidade produto). Condições duplicadas contam uma vez; cenários extras fora do contrato não contam.";
@@ -18,7 +18,7 @@ export const WIDGET_CATALOG: Record<WidgetType, { kind: ChartKind; label: string
   rate_trend: { kind: "bands", label: "Taxa de sucesso por dia", description: "Linha da taxa diária sobre as faixas da meta (≥ 90% verde).", defaultTitle: "Taxa de sucesso diária vs meta", defaultWidth: "full", info: RATE_INFO },
   daily_columns: { kind: "column", label: "Resultados diários (colunas)", description: "Aprovados, flaky e falhas por dia em colunas empilhadas.", defaultTitle: "Resultados diários", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
   daily_results: { kind: "line", label: "Resultados diários (área)", description: "Área empilhada de aprovados, flaky e falhas por dia.", defaultTitle: "Resultados diários (área)", defaultWidth: "full", info: "Soma diária considerando apenas a primeira tentativa de cada gatilho." },
-  daily_execution_volume: { kind: "column", label: "Volume diário de execuções", description: "Quantidade de execuções do CI e de cenários por dia no período selecionado.", defaultTitle: "Volume diário de execuções", defaultWidth: "full", info: "Execuções do CI: ações agendadas registradas, contando apenas a primeira tentativa de cada gatilho. Execuções de cenários: soma dos resultados de testes registrados nessas ações, incluindo aprovados, flaky e falhas definitivas. Uma ação sem resultados publicados deixa o total de cenários do dia indisponível. O período segue o filtro do cabeçalho. Os dados consolidados somam os projetos da frente API ou UI selecionada." },
+  daily_execution_volume: { kind: "column", label: "Volume diário de execuções", description: "Uma barra por execução agendada do CI, agrupada por dia nos últimos 15 dias.", defaultTitle: "Volume diário de execuções", defaultWidth: "full", info: "A altura representa a quantidade de resultados de testes na execução. A cor representa a taxa de sucesso, incluindo flaky recuperados: verde a partir de 90%, amarelo de 80% a menos de 90% e vermelho abaixo de 80%. Resultados indisponíveis não recebem classificação. Considera a primeira tentativa de cada execução agendada; os últimos 15 dias são fixos, independentemente do filtro superior." },
   top_failures: { kind: "bar", label: "Testes que mais falham", description: "Ranking dos 10 testes com mais falhas definitivas.", defaultTitle: "Testes que mais falham", defaultWidth: "half", info: "Soma das ocorrências de falha definitiva por teste no período." },
   cause_donut: { kind: "bar", label: "Falhas por causa", description: "Quantidade de falhas definitivas por causa, da mais frequente para a menos frequente.", defaultTitle: "Falhas por causa", defaultWidth: "half" },
   quality_funnel: { kind: "funnel", label: "Funil de qualidade", description: "Condições do produto → automatizadas → testes executados → sem falha.", defaultTitle: "Funil de qualidade", defaultWidth: "half", info: "Condições = última semana do período. Testes executados e sem falha definitiva = testes distintos no período." },
@@ -37,12 +37,12 @@ export const WIDGET_CATALOG: Record<WidgetType, { kind: ChartKind; label: string
 export const DEFAULT_WIDGETS: { widget_type: WidgetType; width: "half" | "full" }[] = [
   { widget_type: "success_gauge", width: "half" },
   { widget_type: "summary_cards", width: "half" },
+  { widget_type: "daily_execution_volume", width: "full" },
   { widget_type: "evolution", width: "full" },
   { widget_type: "cause_donut", width: "full" },
   { widget_type: "flaky_table", width: "full" },
   { widget_type: "failure_details", width: "full" },
   { widget_type: "failure_history", width: "full" },
-  { widget_type: "daily_execution_volume", width: "full" },
 ];
 
 export function ProjectionSummary({ projection }: { projection: Projection }) {
@@ -107,7 +107,7 @@ export function WidgetBody({ type, d, product, periodLabel }: { type: string; d:
     case "daily_results":
       return <DailyChart data={dailyResults(d.inPeriod)} />;
     case "daily_execution_volume":
-      return <DailyExecutionVolumeChart data={dailyExecutionVolume(d.inPeriod)} />;
+      return <DailyExecutionVolumeChart data={d.valid} />;
     case "evolution": {
       const proj = computeProjection(filterWeeks(d.evolution, d.periodDays));
       const last = proj.series.filter((p) => p.productConditions != null).at(-1);

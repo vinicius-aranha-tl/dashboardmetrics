@@ -1,31 +1,41 @@
 import { Bar, BarChart, Funnel, FunnelChart, LabelList, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ReferenceArea, Scatter, ScatterChart, Treemap, ZAxis } from "recharts";
 import { Area, AreaChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { rateTone, type DailyExecutionVolume, type DailyResult, type Projection } from "@/lib/metrics";
+import { daysAgoISO, rateTone, summarize, type Execution, type DailyResult, type Projection } from "@/lib/metrics";
 import { EmptyState, fmtDate, fmtInt, fmtPct } from "./primitives";
+import { Tooltip as InfoTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const toneVar = { success: "var(--success)", warning: "var(--warning)", danger: "var(--danger)" };
 const tooltipStyle = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--popover-foreground)", fontSize: 12 };
 const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false };
 
-export function DailyExecutionVolumeChart({ data }: { data: DailyExecutionVolume[] }) {
-  if (!data.length) return <EmptyState>Sem execuções agendadas no período selecionado.</EmptyState>;
+export function DailyExecutionVolumeChart({ data }: { data: Execution[] }) {
+  const today = new Date();
+  const days = Array.from({ length: 15 }, (_, i) => daysAgoISO(today, 14 - i));
+  const visible = data.filter((execution) => execution.date >= days[0]! && execution.date <= days[14]!);
+  const maximum = Math.max(1, ...visible.map((execution) => execution.results.length));
   return (
     <div>
-      <p className="mb-3 text-xs text-muted-foreground">Execuções agendadas; cada série usa seu próprio eixo. Dias sem dados de cenários aparecem sem coluna de cenários.</p>
-      <div className="h-80">
-        <ResponsiveContainer>
-          <BarChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
-            <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="date" tickFormatter={fmtDate} {...axis} minTickGap={24} />
-            <YAxis yAxisId="scenarios" {...axis} allowDecimals={false} width={45} />
-            <YAxis yAxisId="ci" orientation="right" {...axis} allowDecimals={false} width={45} />
-            <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => fmtDate(String(value))} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="scenarios" dataKey="scenarioRuns" name="Execuções de cenários (eixo esquerdo)" fill="var(--chart-1)" isAnimationActive={false} />
-            <Bar yAxisId="ci" dataKey="ciRuns" name="Execuções do CI (eixo direito)" fill="var(--chart-3)" isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
+      <p className="mb-3 text-xs text-muted-foreground">Últimos 15 dias · execuções agendadas · cada barra representa uma execução do CI. A altura mostra a quantidade de resultados de testes.</p>
+      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"><span>🟢 ≥ 90% Saudável</span><span>🟡 80% a &lt; 90% Atenção</span><span>🔴 &lt; 80% Crítico</span><span>Sem cor: resultados indisponíveis</span></div>
+      <div className="overflow-x-auto">
+        <div className="flex min-w-[900px] gap-1">
+          {days.map((day) => {
+            const executions = visible.filter((execution) => execution.date === day);
+            return <div key={day} className="min-w-14 flex-1 text-center">
+              <div className="flex h-48 items-end justify-center gap-1 border-b border-border px-1">
+                {executions.map((execution, index) => {
+                  const result = summarize([execution]);
+                  const tone = result.rate == null ? "var(--muted-foreground)" : toneVar[rateTone(result.rate)];
+                  const details = `${fmtDate(day)} · ${execution.dataSource} · Execução ${index + 1} · ${result.rate == null ? "Resultados indisponíveis" : `${fmtInt(result.total)} testes · ${fmtPct(result.rate)} de sucesso`}`;
+                  return <InfoTooltip key={`${execution.triggerId}-${execution.id}`}><TooltipTrigger asChild><button type="button" aria-label={details} className="w-4 min-w-2 max-w-5 rounded-t-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" style={{ backgroundColor: tone, height: `${result.total ? Math.max(4, result.total / maximum * 100) : 3}%` }} /></TooltipTrigger><TooltipContent><p>{fmtDate(day)} · {execution.dataSource}</p><p>Execução {index + 1}</p><p>{result.rate == null ? "Resultados indisponíveis" : `${fmtInt(result.total)} testes · ${fmtPct(result.rate)} de sucesso`}</p></TooltipContent></InfoTooltip>;
+                })}
+              </div>
+              <div className="mt-2 text-[10px] text-muted-foreground">{day.slice(5).split("-").reverse().join("/")}</div>
+            </div>;
+          })}
+        </div>
       </div>
+      {!visible.length && <p className="mt-4 text-center text-sm text-muted-foreground">Sem execuções agendadas nos últimos 15 dias.</p>}
     </div>
   );
 }

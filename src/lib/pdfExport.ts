@@ -1,4 +1,4 @@
-import { dailyExecutionVolume, summarize, testCount, type Product } from "@/lib/metrics";
+import { dailyExecutionVolume, summarize, summarizeExecutionHealth, testCount, type Product } from "@/lib/metrics";
 import type { DashData } from "@/data/useDashboard";
 
 /** Relatório executivo desenhado com texto e formas vetoriais a partir dos dados, sem capturas da tela. */
@@ -75,16 +75,26 @@ export async function exportDashboardPdf(opts: { title: string; subtitle: string
       const scenarioTotal = daily.some(d => d.scenarioRuns == null) ? "Indisponível" : number(daily.reduce((sum, d) => sum + (d.scenarioRuns ?? 0), 0));
       line("Total no período: " + number(daily.reduce((sum, d) => sum + d.ciRuns, 0)) + " execuções do CI · " + scenarioTotal + " cenários executados.", 9);
       y += 5;
-      const max = Math.max(1, ...daily.map(d => d.scenarioRuns ?? 0));
-      for (const day of daily) {
-        if (y > bottom - 10) page(category, "Volume diário - continuação", opts.subtitle + " · execuções agendadas");
-        pdf.setFont("helvetica", "normal").setFontSize(8).setTextColor(...ink).text(date(day.date), M, y + 4);
-        const label = number(day.ciRuns) + " CI · " + (day.scenarioRuns == null ? "cenários indisponíveis" : number(day.scenarioRuns) + " cenários");
-        if (day.scenarioRuns != null && day.scenarioRuns > 0) pdf.setFillColor(...blue).roundedRect(M + 29, y, 140 * day.scenarioRuns / max, 5, 1, 1, "F");
-        pdf.setFont("helvetica", "normal").setTextColor(...ink).text(text(label), M + 174, y + 4);
-        y += 8;
-      }
-      y += 3; line("As barras mostram a quantidade de cenários executados; os números indicam também o total de execuções do CI.", 8);
+      const health = summarizeExecutionHealth(data.inPeriod);
+      const subheading = (label: string, color: [number, number, number]) => {
+        if (y > bottom - 14) page(category, "Volume diário - continuação", opts.subtitle + " · execuções agendadas");
+        pdf.setFont("helvetica", "bold").setFontSize(10).setTextColor(...color).text(text(label), M, y);
+        y += 6;
+      };
+      const detail = (items: typeof health.critical) => {
+        const dayCount = new Set(items.map(item => item.execution.date)).size;
+        line(`${number(items.length)} ${items.length === 1 ? "execução" : "execuções"} em ${number(dayCount)} ${dayCount === 1 ? "dia" : "dias"}.`, 8);
+        for (const item of items) line(`${date(item.execution.date)} · ${item.execution.dataSource} · ${number(item.total)} testes · ${percent(item.rate)} de sucesso`, 8);
+        y += 3;
+      };
+      subheading("Críticas · abaixo de 80%", red);
+      detail(health.critical);
+      subheading("Atenção · de 80% a menos de 90%", [154, 91, 0]);
+      detail(health.attention);
+      subheading("Demais execuções · a partir de 90%", green);
+      if (health.healthy.length) line(`${number(health.healthy.length)} execuções em ${number(new Set(health.healthy.map(item => item.execution.date)).size)} dias. Taxa conjunta: ${percent(health.healthySummary.rate)}, calculada sobre todos os resultados dessas execuções.`, 8);
+      else line("Nenhuma execução nesta faixa.", 8);
+      if (health.missing.length) line(`${number(health.missing.length)} execuções sem resultados disponíveis ficaram fora das taxas.`, 8);
     }
     const reasonData = data.specialByProduct.reasons;
     page(category, "Principais causas de falha", "Falhas definitivas · últimos 30 dias, conforme painel");
