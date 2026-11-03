@@ -9,12 +9,22 @@ import {
   flakyTable,
   rateTone,
   summarize,
+  summarizeExecutionHealth,
   type EvolutionPoint,
   type Execution,
 } from "./metrics";
 
 const ex = (o: Partial<Execution>): Execution => ({
   id: "x", product: "api", triggerId: "t1", runAttempt: 1, trigger: "scheduled", date: "2026-10-01", dataSource: "ds", results: [], ...o,
+});
+
+it("separa execuções por faixa e calcula a taxa conjunta sem incluir dados ausentes", () => {
+  const tests = (passed: number, failed: number) => [...Array.from({ length: passed }, (_, i) => ({ title: `p${i}`, status: "passed" as const })), ...Array.from({ length: failed }, (_, i) => ({ title: `f${i}`, status: "failed" as const }))];
+  const result = summarizeExecutionHealth([ex({ id: "critica", results: tests(7, 3) }), ex({ id: "atencao", results: tests(8, 2) }), ex({ id: "boa", results: tests(9, 1) }), ex({ id: "vazia" })]);
+  expect(result.critical.map(item => item.execution.id)).toEqual(["critica"]);
+  expect(result.attention.map(item => item.execution.id)).toEqual(["atencao"]);
+  expect(result.healthySummary.rate).toBe(90);
+  expect(result.missing).toHaveLength(1);
 });
 
 it("conta ações e cenários por dia sem contar reruns", () => {

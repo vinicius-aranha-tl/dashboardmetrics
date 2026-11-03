@@ -118,6 +118,16 @@ export function summarize(execs: Execution[]): Summary {
   return { passed, flaky, failed, total, rate: total ? ((passed + flaky) / total) * 100 : null };
 }
 
+/** Per-execution status preserves missing results instead of treating them as failures. */
+export function summarizeExecutionHealth(execs: Execution[]) {
+  const classified = execs.map((execution) => ({ execution, ...summarize([execution]) }));
+  const critical = classified.filter((item) => item.rate != null && item.rate < 80).sort((a, b) => a.rate! - b.rate! || a.execution.date.localeCompare(b.execution.date));
+  const attention = classified.filter((item) => item.rate != null && item.rate >= 80 && item.rate < 90).sort((a, b) => a.rate! - b.rate! || a.execution.date.localeCompare(b.execution.date));
+  const healthy = classified.filter((item) => item.rate != null && item.rate >= 90);
+  const missing = classified.filter((item) => item.rate == null);
+  return { critical, attention, healthy, missing, healthySummary: summarize(healthy.map((item) => item.execution)) };
+}
+
 export type Tone = "success" | "warning" | "danger";
 export function rateTone(rate: number): Tone {
   if (rate >= 90) return "success";
