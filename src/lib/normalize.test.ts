@@ -22,6 +22,13 @@ describe("decodeGithubContent", () => {
 });
 
 describe("normalizeExecutions", () => {
+  it("mantém a execução e desconsidera testes ignorados ou pendentes nas métricas", () => {
+    const [out] = normalizeExecutions([{ date: "2026-11-04", run: { event: "schedule" }, testResults: [{ title: "Executado", status: "passed" }, { title: "Ignorado", status: "skipped" }, { title: "Pendente", status: "pending" }] }], "api");
+    expect(out?.results).toEqual([{ title: "Executado", status: "passed" }]);
+    expect(out?.trigger).toBe("scheduled");
+    const [summary] = normalizeExecutions([{ date: "2026-11-04", tests: { total: 3, passed: 1, skipped: 1, pending: 1 } }], "api");
+    expect(summary?.results).toHaveLength(1);
+  });
   it("reconhece a execução do Jenkins sem incluir chamadas manuais de outras contas", () => {
     const entry = (actor: string, origin: string) => ({ generatedAt: "2026-11-03T10:00:00Z", run: { id: actor, event: "workflow_dispatch", actor, origin }, tests: { total: 1, passed: 1 } });
     const out = normalizeExecutions({ executions: [entry("joao-paulo-vertem", "jenkins_schedule"), entry("outra-conta", "jenkins_schedule"), entry("outra-conta", "other")] }, "api");
