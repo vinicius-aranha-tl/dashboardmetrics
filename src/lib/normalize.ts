@@ -99,12 +99,16 @@ function readTest(t: unknown, where: string): TestResult {
 
 /** Per-test list when published; otherwise rebuilt from the summary counts (tests.passed/failed/flaky). */
 function readResults(item: Obj, i: number): TestResult[] {
+  const executedResults = (list: unknown[], where: string) => list.flatMap((test, j) => {
+    if (isObj(test) && ["skipped", "pending"].includes(String(pick(test, ["status", "outcome", "result"]) ?? "").toLowerCase())) return [];
+    return [readTest(test, `${where}[${j}]`)];
+  });
   for (const key of ["results", "testResults"]) {
     const list = item[key];
-    if (Array.isArray(list) && list.length) return list.map((t, j) => readTest(t, `[${i}].${key}[${j}]`));
+    if (Array.isArray(list) && list.length) return executedResults(list, `[${i}].${key}`);
   }
   const sum = isObj(item["tests"]) ? (item["tests"] as Obj) : null;
-  if (Array.isArray(item["tests"])) return (item["tests"] as unknown[]).map((t, j) => readTest(t, `[${i}].tests[${j}]`));
+  if (Array.isArray(item["tests"])) return executedResults(item["tests"] as unknown[], `[${i}].tests`);
   if (!sum) throw new FormatError(`[${i}].tests ausente (resumo ou lista de testes)`);
   if (sum["available"] === false) return [];
   const n = (k: string) => { const v = Number(sum[k] ?? 0); return Number.isFinite(v) ? v : 0; };
@@ -112,7 +116,7 @@ function readResults(item: Obj, i: number): TestResult[] {
   const flakyList = Array.isArray(item["flakyTests"]) ? (item["flakyTests"] as unknown[]) : [];
   const flakyTitles = flakyList.map((f, k) => (isObj(f) ? String(pick(f, ["title", "name"]) ?? `Teste instável ${k + 1}`) : String(f)));
   const flaky = Math.max(n("flaky"), flakyTitles.length);
-  const total = Math.max(n("total"), n("passed") + failed + flaky);
+  const total = Math.max(n("total") - n("skipped") - n("pending"), n("passed") + failed + flaky);
   const out: TestResult[] = [];
   for (let k = 0; k < flaky; k++) out.push({ title: flakyTitles[k] ?? `Teste instável ${k + 1}`, status: "flaky" });
   for (let k = 0; k < failed; k++) out.push({ title: `Falha sem detalhe ${k + 1}`, status: "failed", cause: "Sem detalhe publicado" });
