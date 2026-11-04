@@ -22,6 +22,13 @@ describe("decodeGithubContent", () => {
 });
 
 describe("normalizeExecutions", () => {
+  it("reconhece a execução do Jenkins sem incluir chamadas manuais de outras contas", () => {
+    const entry = (actor: string, origin: string) => ({ generatedAt: "2026-11-03T10:00:00Z", run: { id: actor, event: "workflow_dispatch", actor, origin }, tests: { total: 1, passed: 1 } });
+    const out = normalizeExecutions({ executions: [entry("joao-paulo-vertem", "jenkins_schedule"), entry("outra-conta", "jenkins_schedule"), entry("outra-conta", "other")] }, "api");
+    expect(out.map(row => row.trigger)).toEqual(["scheduled", "manual", "manual"]);
+    const base = { generatedAt: "2026-11-03T10:00:00Z", runId: "1", testKey: "a", title: "Teste", event: "workflow_dispatch", status: "failed", origin: "jenkins_schedule" };
+    expect(normalizeDatedFailures({ results: [{ ...base, actor: "joao-paulo-vertem" }, { ...base, testKey: "b", actor: "outra-conta" }] }).failures).toHaveLength(1);
+  });
   it("maps aliases, statuses and triggers", () => {
     const out = normalizeExecutions({ runs: [{ run_id: 9, run_attempt: 2, event: "workflow_dispatch", started_at: "2026-10-30T10:00:00Z", tests: [{ name: "x", outcome: "unstable" }] }] }, "api");
     expect(out[0]).toMatchObject({ id: "9", runAttempt: 2, trigger: "manual", date: "2026-10-30", product: "api" });
