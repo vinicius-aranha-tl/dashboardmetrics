@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireBackendAuth } from "@/lib/backend-auth";
 import { mapProject } from "@/lib/backend-client";
 import type { EvolutionPoint, Execution, Product } from "@/lib/metrics";
-import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeDatedFailures, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, SQUAREDUP_FILES, STABILITY_FILE, TEST_HISTORY_FILE, type DatedFailureHistory, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
+import { countRecords, decodeGithubContent, EVOLUTION_FILE, EXECUTIONS_FILE, FormatError, LIFECYCLE_FILE, normalizeDatedFailures, normalizeEvolution, normalizeExecutions, normalizeLifecycle, normalizeReasons, normalizeStability, REASONS_FILE, QUALITY_HUB_FILES, STABILITY_FILE, TEST_HISTORY_FILE, type DatedFailureHistory, type ReasonRow, type SpecialFailureRow, type StabilityRow } from "@/lib/normalize";
 
 export type SourceKind = "executions" | "evolution";
 export interface SourceStatus {
@@ -25,14 +25,21 @@ async function fetchGithub(url: string, force = false, raw = true): Promise<unkn
   const u = new URL(url);
   if (!ALLOWED_HOSTS.includes(u.hostname)) throw new Error(`Host não permitido (${u.hostname}).`);
   const token = process.env["GITHUB_TOKEN"];
-  const res = await fetch(u, {
+  const requestOptions = {
     headers: {
       // raw media type returns file bodies directly (works above the 1 MB base64 limit)
       Accept: raw && u.hostname === "api.github.com" ? "application/vnd.github.raw+json" : "application/vnd.github+json",
       "User-Agent": "dashboard-metrics-for-qa",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-  });
+  };
+  let res = await fetch(u, requestOptions);
+  // Transição: consultar o diretório anterior apenas quando o novo arquivo ainda não existir.
+  if (res.status === 404 && u.hostname === "api.github.com" && u.pathname.includes("/contents/quality-hub")) {
+    const previous = new URL(u);
+    previous.pathname = previous.pathname.replace(/\/contents\/quality-hub(?=\/|$)/, "/contents/squaredup");
+    res = await fetch(previous, requestOptions);
+  }
   if (!res.ok) {
     const hint = res.status === 404 ? (token ? " — arquivo, branch ou repositório não encontrado (ou token sem acesso)." : " — repositório privado? Configure o GITHUB_TOKEN.") : res.status === 401 ? " — token inválido ou expirado." : res.status === 403 ? " — sem permissão ou limite de uso do GitHub." : "";
     throw new Error(`GitHub respondeu ${res.status}${hint}`);
@@ -43,7 +50,7 @@ async function fetchGithub(url: string, force = false, raw = true): Promise<unkn
 }
 
 export function contentsUrl(owner: string, repo: string, branch: string, file: string) {
-  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/squaredup/${file}?ref=${encodeURIComponent(branch)}`;
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/quality-hub/${file}?ref=${encodeURIComponent(branch)}`;
 }
 
 async function readSource<T>(url: string | null, normalize: (raw: unknown) => T, force: boolean, count: (d: T) => number = (d) => (d as unknown[]).length, missingIsUnavailable = false) {
@@ -166,7 +173,7 @@ export const loadDashboardData = createServerFn({ method: "POST" })
 
 export interface FileCheck { file: string; ok: boolean; records: number | null; updatedAt: string | null; expected: boolean; message?: string }
 
-/** Lists every file in squaredup/ and reads each one, reporting status, records and updatedAt. */
+/** Lists every file in quality-hub/ and reads each one, reporting status, records and updatedAt. */
 export const testRepo = createServerFn({ method: "POST" })
   .middleware([requireBackendAuth])
   .validator((d: unknown) => z.object({
@@ -175,20 +182,19 @@ export const testRepo = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     if (context.backendRole !== "admin") throw new Error("Acesso restrito a administradores.");
     const tokenConfigured = Boolean(process.env["GITHUB_TOKEN"]);
-    const dirUrl = `https://api.github.com/repos/${encodeURIComponent(data.owner)}/${encodeURIComponent(data.repo)}/contents/squaredup?ref=${encodeURIComponent(data.branch)}`;
+    const dirUrl = `https://api.github.com/repos/${encodeURIComponent(data.owner)}/${encodeURIComponent(data.repo)}/contents/quality-hub?ref=${encodeURIComponent(data.branch)}`;
     let names: string[];
     try {
       const dir = await fetchGithub(dirUrl, true, false);
-      if (!Array.isArray(dir)) throw new Error("squaredup/ não é uma pasta");
+      if (!Array.isArray(dir)) throw new Error("quality-hub/ não é uma pasta");
       names = dir.filter((f) => f && f.type === "file" && String(f.name).endsWith(".json")).map((f) => String(f.name));
     } catch (e) {
-      return { files: [] as FileCheck[], tokenConfigured, error: `Não foi possível listar squaredup/: ${(e as Error).message}` };
+      return { files: [] as FileCheck[], tokenConfigured, error: `Não foi possível listar quality-hub/: ${(e as Error).message}` };
     }
-    const expected = SQUAREDUP_FILES[data.product];
+    const expected = QUALITY_HUB_FILES[data.product];
     const all = [...new Set([...expected, ...names])];
     const files: FileCheck[] = await Promise.all(all.map(async (file) => {
       const isExpected = expected.includes(file);
-      if (!names.includes(file)) return { file, ok: false, records: null, updatedAt: null, expected: isExpected, message: "Arquivo não publicado na pasta." };
       try {
         const raw = await fetchGithub(contentsUrl(data.owner, data.repo, data.branch, file), true);
         let records = countRecords(raw);
